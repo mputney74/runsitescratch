@@ -281,7 +281,35 @@ function coordsFromFd(fd) {
   };
 }
 
+// ── Field normalization — bridge form field names to pipeline names ──
+function normalizeFormData(fd, vertical) {
+  const n = { ...fd };
+  if (vertical === "carwash") {
+    if (!n.carsPerHour && n.throughputTarget) n.carsPerHour = n.throughputTarget;
+    if (!n.operatingHours && n.hours) {
+      const hoursMap = { "dawn_dusk": 13, "extended_wash": 14, "24hr": 18, "custom": 12 };
+      n.operatingHours = hoursMap[n.hours] || 12;
+    }
+    if (!n.competitorCount) {
+      let count = 0;
+      for (let i = 1; i <= 4; i++) { if (n[`comp${i}Brand`] && n[`comp${i}Brand`].trim()) count++; }
+      if (n.newCompBrand && n.newCompBrand.trim()) count++;
+      n.competitorCount = count;
+    }
+  }
+  if (vertical === "laundromat") {
+    if (!n.washerCount && n.totalWashers) n.washerCount = n.totalWashers;
+    if (!n.dryerCount && n.totalDryers) n.dryerCount = n.totalDryers;
+    if (n.paymentSystem && !n.hasCardPay) {
+      n.hasCardPay = (n.paymentSystem === "card_app" || n.paymentSystem === "both");
+      n.hasAppPay = (n.paymentSystem === "card_app" || n.paymentSystem === "both");
+    }
+  }
+  return n;
+}
+
 function validateIntake(fd, vertical) {
+  fd = normalizeFormData(fd, vertical);
   const errors = [];
   const warnings = [];
   const err = (field, message) => errors.push({ field, message, severity: "critical" });
@@ -351,7 +379,7 @@ function validateIntake(fd, vertical) {
   }
 
   // ═══ HIGH: AADT on fuel-dependent verticals ═══
-  const fuelVerts = ["cstore", "travel", "carwash"];
+  const fuelVerts = ["cstore", "travel"];
   if ((fuelVerts.includes(vertical) || (vertical === "grocery" && fd.hasFuel)) && !parseInt(fd.aadt)) {
     warn("aadt", "AADT is blank on a fuel-dependent vertical. We'll attempt to auto-pull from research, but a known value is more reliable.");
   }
@@ -362,6 +390,7 @@ function validateIntake(fd, vertical) {
 // ─── FORMAT INTAKE WITH COORDINATE OVERRIDE ─────────────────
 
 function formatIntake(fd, vertical, tier) {
+  fd = normalizeFormData(fd, vertical);
   const lines = [`Vertical: ${vertical}`, `Tier: ${tier}`];
 
   // ── Location block: coordinate override when no address ──
@@ -564,6 +593,94 @@ function formatIntake(fd, vertical, tier) {
     }
   }
 
+  // ── QSR ──
+  if (vertical === "qsr") {
+    const brand = fd.brandName || fd.brandOther || fd.proprietaryName || "Unknown";
+    const isFranchise = fd.brandOrProprietary === "franchise";
+    const type = fd.restaurantType || "qsr";
+    const hasDT = fd.hasDriveThru;
+    const seats = parseInt(fd.interiorSeats) || 0;
+    const sqft = parseInt(fd.storeSqft) || 2000;
+
+    const brandAUV = {
+      "McDonald's": [2800000, 3800000], "Chick-fil-A": [6500000, 8500000],
+      "Raising Cane's": [4000000, 5500000], "Whataburger": [2800000, 3500000],
+      "Taco Bell": [1600000, 2200000], "Wendy's": [1800000, 2400000],
+      "Popeyes": [1400000, 2000000], "Subway": [400000, 550000],
+      "Arby's": [1100000, 1500000], "Dunkin'": [900000, 1300000],
+      "Panera Bread": [2500000, 3200000], "Chipotle": [2800000, 3500000],
+      "Five Guys": [1200000, 1800000], "Wingstop": [1600000, 2200000],
+      "Domino's": [1100000, 1400000], "Pizza Hut": [800000, 1100000],
+      "KFC": [1100000, 1500000], "Sonic Drive-In": [1200000, 1600000],
+      "Starbucks": [1800000, 2400000], "Panda Express": [1800000, 2400000],
+    };
+
+    const auvRange = brandAUV[brand];
+    if (isFranchise && auvRange) {
+      const moLow = Math.round(auvRange[0] / 12);
+      const moHigh = Math.round(auvRange[1] / 12);
+      lines.push(`QSR BENCHMARK NOTE: ${brand} — FDD AUV range: $${auvRange[0].toLocaleString()}-${auvRange[1].toLocaleString()}/yr ($${moLow.toLocaleString()}-${moHigh.toLocaleString()}/mo). Year 1 ramp: 70-85% of stabilized AUV. Do NOT project above $${moHigh.toLocaleString()}/mo for Year 1.`);
+    } else if (isFranchise) {
+      lines.push(`QSR BENCHMARK NOTE: ${brand} — No FDD AUV data loaded. Use brand-specific FDD if available. General QSR range: $70K-180K/mo. Do NOT project above $200K/mo without explicit justification.`);
+    } else {
+      const propCeil = type === "fast_casual" ? 180000 : type === "table_service" ? 250000 : 150000;
+      lines.push(`QSR BENCHMARK NOTE: Independent/proprietary concept (${brand}). ${type === "fast_casual" ? "Fast casual" : type === "table_service" ? "Table service" : "QSR"} — independents index 60-80% of franchise AUV. Revenue ceiling: $${propCeil.toLocaleString()}/mo. Do NOT project above this without exceptional justification.`);
+    }
+
+    const dtNote = hasDT ? "Drive-thru present — expect 60-70% of revenue from DT channel." : "NO drive-thru — dine-in/carryout only. Revenue ceiling is 40-55% of a comparable DT location.";
+    lines.push(`CHANNEL NOTE: ${dtNote} Interior seats: ${seats}. Building: ${sqft.toLocaleString()} SF.`);
+
+    const brandTicket = {
+      "McDonald's": [9, 12], "Chick-fil-A": [10, 14], "Raising Cane's": [10, 13],
+      "Taco Bell": [7, 10], "Wendy's": [9, 12], "Subway": [8, 11],
+      "Arby's": [8, 11], "Dunkin'": [5, 8], "Chipotle": [12, 16],
+      "Five Guys": [14, 18], "Wingstop": [16, 20], "Popeyes": [9, 12],
+      "Whataburger": [9, 13], "Sonic Drive-In": [7, 10], "Panda Express": [9, 12],
+    };
+    const ticket = brandTicket[brand];
+    if (ticket) {
+      lines.push(`TICKET NOTE: ${brand} avg ticket: $${ticket[0]}-${ticket[1]}. Revenue = daily transactions × avg ticket × 30. Adjust transaction COUNT, not ticket, to hit revenue target.`);
+    } else {
+      const genTicket = type === "fast_casual" ? "$14-22" : type === "table_service" ? "$18-30" : "$8-14";
+      lines.push(`TICKET NOTE: ${type} avg ticket: ${genTicket}. Revenue = daily transactions × avg ticket × 30. Adjust transaction COUNT, not ticket, to hit revenue target.`);
+    }
+  }
+
+  // ── Liquor Store ──
+  if (vertical === "liquor") {
+    const sqft = parseInt(fd.storeSqft) || 2500;
+    const hasBeerCave = fd.hasBeerCave;
+    const format = fd.storeFormat || "standalone";
+    const productFocus = fd.productFocus || "full_range";
+    const brand = fd.storeBrand || "Independent";
+
+    let rLow, rHigh, tierLabel;
+    if (sqft <= 2000) { rLow = 22; rHigh = 35; tierLabel = "small neighborhood"; }
+    else if (sqft <= 3500) { rLow = 25; rHigh = 40; tierLabel = "mid-format"; }
+    else if (sqft <= 5000) { rLow = 25; rHigh = 38; tierLabel = "standard"; }
+    else { rLow = 20; rHigh = 32; tierLabel = "large format"; }
+
+    const revLow = sqft * rLow;
+    const revHigh = sqft * rHigh;
+    lines.push(`REVENUE NOTE: ${tierLabel} liquor store at ${sqft.toLocaleString()} SF. Rev/SF: $${rLow}-${rHigh}/mo. Total range: $${revLow.toLocaleString()}-${revHigh.toLocaleString()}/mo. Do NOT exceed $${revHigh.toLocaleString()}/mo.`);
+
+    if (hasBeerCave) {
+      lines.push(`BEER CAVE NOTE: Customer-facing walk-in beer cave present. Beer caves add 25-40% to beer category revenue vs cooler-door-only. Expect beer share of 30-38% of total sales (vs 25-30% without cave).`);
+    }
+
+    const formatNote = format === "attached" ? "Attached to c-store/grocery — expect some cannibalization but shared foot traffic." :
+      format === "big_box" ? "Large format / superstore — higher volume, deeper selection, but higher rent and labor." :
+      format === "strip" ? "Strip center / inline — dependent on anchor traffic and parking." :
+      "Standalone location — dependent on destination traffic and visibility.";
+    lines.push(`FORMAT NOTE: ${formatNote} Brand: ${brand}. Product focus: ${productFocus}.`);
+
+    if (fd.licenseType === "beer_wine_only") {
+      lines.push(`LICENSE NOTE: Beer & wine ONLY — no spirits license. Spirits = 40-50% of typical liquor store revenue. Revenue ceiling is 50-60% of a full-package store. Adjust total projection downward accordingly.`);
+    } else if (fd.licenseType === "state_abc") {
+      lines.push(`LICENSE NOTE: State ABC / control state. Spirits pricing is state-controlled — margins on spirits are typically lower (18-22% vs 25-30% in open states). Total margin expectation: 20-25% blended.`);
+    }
+  }
+
   // ── Traffic Structure Note (cstore / travel with dual-road data) ──
   if ((vertical === "cstore" || vertical === "travel") && (fd.hwyAadt || fd.surfaceRoadName || fd.hwyName)) {
     const surfaceAadt = parseInt(fd.aadt) || 0;
@@ -737,6 +854,7 @@ Output ONLY the config JSON. No explanation, no markdown fencing.`;
 // Text guardrails fail when the model has strong priors. This function
 // enforces ceilings/floors in JavaScript after S2 returns its projections.
 function clampProjections(analysis, fd, vertical) {
+  fd = normalizeFormData(fd, vertical);
   const p = analysis.projections;
   if (!p) return analysis;
 
@@ -885,6 +1003,177 @@ function clampProjections(analysis, fd, vertical) {
     }
   }
 
+
+  // QSR
+  if (vertical === "qsr") {
+    const brand = fd.brandName || fd.brandOther || fd.proprietaryName || "Unknown";
+    const isFranchise = fd.brandOrProprietary === "franchise";
+    const type = fd.restaurantType || "qsr";
+    const hasDT = fd.hasDriveThru;
+
+    const brandAUVCeil = {
+      "McDonald's": 3800000, "Chick-fil-A": 8500000, "Raising Cane's": 5500000,
+      "Whataburger": 3500000, "Taco Bell": 2200000, "Wendy's": 2400000,
+      "Popeyes": 2000000, "Subway": 550000, "Arby's": 1500000,
+      "Dunkin'": 1300000, "Panera Bread": 3200000, "Chipotle": 3500000,
+      "Five Guys": 1800000, "Wingstop": 2200000, "Domino's": 1400000,
+      "Pizza Hut": 1100000, "KFC": 1500000, "Sonic Drive-In": 1600000,
+      "Starbucks": 2400000, "Panda Express": 2400000,
+    };
+
+    let revCeil;
+    if (isFranchise && brandAUVCeil[brand]) {
+      revCeil = Math.round(brandAUVCeil[brand] / 12);
+    } else if (isFranchise) {
+      revCeil = 250000;
+    } else {
+      revCeil = type === "fast_casual" ? 180000 : type === "table_service" ? 250000 : 150000;
+    }
+    if (!hasDT && isFranchise) revCeil = Math.round(revCeil * 0.55);
+
+    clamp("restaurant", null, revCeil);
+    clamp("sales", null, revCeil);
+    clamp("total", null, revCeil);
+    clamp("revenue", null, revCeil);
+
+    const catKey = Object.keys(p).find(k => k.toLowerCase().includes("cater"));
+    if (catKey && p[catKey]) {
+      const catCeil = Math.round(revCeil * 0.15);
+      p[catKey].high = Math.min(p[catKey].high, catCeil);
+      if (p[catKey].mid > catCeil * 0.85) p[catKey].mid = Math.round(catCeil * 0.85);
+      if (p[catKey].low > p[catKey].mid * 0.75) p[catKey].low = Math.round(p[catKey].mid * 0.75);
+    }
+  }
+
+  // Liquor
+  if (vertical === "liquor") {
+    const sqft = parseInt(fd.storeSqft) || 2500;
+    let maxRevPerSF;
+    if (sqft <= 2000) maxRevPerSF = 35;
+    else if (sqft <= 3500) maxRevPerSF = 40;
+    else if (sqft <= 5000) maxRevPerSF = 38;
+    else maxRevPerSF = 32;
+    if (fd.licenseType === "beer_wine_only") maxRevPerSF = Math.round(maxRevPerSF * 0.60);
+
+    const revCeil = sqft * maxRevPerSF;
+    clamp("liquor", null, revCeil);
+    clamp("sales", null, revCeil);
+    clamp("total", null, revCeil);
+    clamp("revenue", null, revCeil);
+    clamp("store", null, revCeil);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // TRANSACTION VALUE CLAMP — AADT-derived & capacity-derived
+  // Catches projections that imply physically impossible per-visit spend.
+  // Runs AFTER static clamps, BEFORE margin enforcement.
+  // ══════════════════════════════════════════════════════════════
+
+  const findKey = (keywords) => Object.keys(p).find(k => {
+    const lk = k.toLowerCase();
+    return keywords.some(kw => lk.includes(kw));
+  });
+
+  const applyTxnClamp = (key, ceil) => {
+    if (!key || !p[key] || !ceil || ceil <= 0) return false;
+    if (p[key].high <= ceil) return false;
+    p[key].high = Math.min(p[key].high, ceil);
+    p[key].mid = Math.min(p[key].mid, Math.round(ceil * 0.85));
+    p[key].low = Math.min(p[key].low, Math.round(p[key].mid * 0.75));
+    if (p[key].low >= p[key].mid) p[key].low = Math.round(p[key].mid * 0.75);
+    if (p[key].mid >= p[key].high) p[key].high = Math.round(p[key].mid * 1.18);
+    return true;
+  };
+
+  // ── C-Store / Travel: AADT → max in-store revenue + fuel volume sanity ──
+  if (vertical === "cstore" || vertical === "travel") {
+    const aadt = parseInt(fd.aadt) || 0;
+    const MAX_BASKET = 15;            // NACS avg $8-12; $15 = hard ceiling
+    const IN_STORE_CONV = 0.65;       // ~65% of fuel customers go inside
+
+    if (aadt > 0) {
+      const maxCapture = vertical === "travel" ? 0.035 : 0.05;
+      const dailyFuelCust = Math.round(aadt * maxCapture);
+      const dailyInStoreCust = Math.round(dailyFuelCust * IN_STORE_CONV);
+
+      const maxMonthlyInStore = dailyInStoreCust * MAX_BASKET * 30;
+      const storeKey = findKey(["convenience", "in-store", "in store", "store sales"]);
+      applyTxnClamp(storeKey, maxMonthlyInStore);
+
+      const maxGasGal = Math.round(dailyFuelCust * 10.5 * 30 * 1.25);
+      const gasKey = findKey(["gasoline"]);
+      if (gasKey && p[gasKey]) {
+        const u = (p[gasKey].unit || "").toLowerCase();
+        if (u.includes("gal")) applyTxnClamp(gasKey, maxGasGal);
+      }
+
+      if (fd.hasDiesel && !fd.hasHighFlowDiesel) {
+        const truckPct = parseFloat(fd.truckPct) || 3;
+        const dieselCust = Math.round(dailyFuelCust * (truckPct / 100) * 0.5);
+        const maxDieselGal = Math.round(dieselCust * 15 * 30 * 1.5);
+        const dieselKey = findKey(["diesel"]);
+        if (dieselKey && p[dieselKey]) {
+          const u = (p[dieselKey].unit || "").toLowerCase();
+          if (u.includes("gal")) applyTxnClamp(dieselKey, maxDieselGal);
+        }
+      }
+    } else {
+      const gasKey = findKey(["gasoline"]);
+      if (gasKey && p[gasKey] && p[gasKey].mid > 0) {
+        const impliedDailyFills = p[gasKey].mid / 10.5 / 30;
+        const dailyInStore = Math.round(impliedDailyFills * IN_STORE_CONV);
+        if (dailyInStore > 0) {
+          const maxMonthlyInStore = dailyInStore * MAX_BASKET * 30;
+          const storeKey = findKey(["convenience", "in-store", "in store", "store sales"]);
+          applyTxnClamp(storeKey, maxMonthlyInStore);
+        }
+      }
+    }
+  }
+
+  // ── QSR: capacity-derived revenue ceiling ──
+  if (vertical === "qsr") {
+    const seats = parseInt(fd.interiorSeats) || 40;
+    const hasDT = fd.hasDriveThru;
+    const brand = fd.brandName || fd.brandOther || fd.proprietaryName;
+    const type = fd.restaurantType || "qsr";
+
+    const ticketCeils = {
+      "McDonald's": 12, "Chick-fil-A": 14, "Raising Cane's": 13,
+      "Whataburger": 13, "Taco Bell": 10, "Wendy's": 12,
+      "Popeyes": 12, "Subway": 11, "Arby's": 11,
+      "Dunkin'": 8, "Panera Bread": 16, "Chipotle": 16,
+      "Five Guys": 18, "Wingstop": 20, "Domino's": 14,
+      "Pizza Hut": 14, "KFC": 12, "Sonic Drive-In": 10,
+      "Starbucks": 8, "Panda Express": 12,
+    };
+    const maxTicket = ticketCeils[brand] ||
+      (type === "fast_casual" ? 22 : type === "table_service" ? 30 : 14);
+
+    const hMap = { "24hr": 20, "extended": 18, "standard": 14, "limited": 12 };
+    const opHrs = hMap[fd.hours] || 14;
+
+    let maxDailyTxns = 0;
+    if (hasDT) maxDailyTxns += Math.round(18 * opHrs * 0.70);
+    maxDailyTxns += Math.round(seats * 4);
+    maxDailyTxns = Math.round(maxDailyTxns * 1.15);
+
+    const maxMonthlyRev = maxDailyTxns * maxTicket * 30;
+    const restKey = findKey(["restaurant", "sales", "total", "revenue"]);
+    applyTxnClamp(restKey, maxMonthlyRev);
+  }
+
+  // ── Grocery: register throughput ceiling ──
+  if (vertical === "grocery") {
+    const registers = (parseInt(fd.cashierStations) || 3) + (parseInt(fd.selfCheckout) || 0);
+    const hMap = { "24hr": 20, "extended": 16, "standard": 13, "limited": 10 };
+    const opHrs = hMap[fd.hours] || 13;
+    const maxDailyTxns = Math.round(registers * 25 * opHrs * 0.60);
+    const MAX_GROCERY_BASKET = 55;
+    const maxMonthlyRev = maxDailyTxns * MAX_GROCERY_BASKET * 30;
+    const grocKey = findKey(["grocery", "market", "total", "sales"]);
+    applyTxnClamp(grocKey, maxMonthlyRev);
+  }
 
   // ── Gross margin enforcement ──
   const gm = analysis.grossMargins;
