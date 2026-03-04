@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Primary Meta -->
+    <title>RunSiteScratch — Revenue Projections for Fuel & Convenience Retail</title>
+    <meta name="description" content="AI-powered revenue projections for convenience stores, travel centers, car washes, laundromats, and more. Site-specific forecasts in minutes." />
+    <meta name="theme-color" content="#0a0a0f" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://runsitescratch.com/" />
+    <meta property="og:title" content="RunSiteScratch — Revenue Projections" />
+    <meta property="og:description" content="AI-powered revenue projections for fuel & convenience retail. Defensible forecasts in minutes." />
+    <meta property="og:image" content="https://runsitescratch.com/og-image.png" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="RunSiteScratch — Revenue Projections" />
+    <meta name="twitter:description" content="AI-powered revenue projections for fuel & convenience retail." />
+
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Stripe.js — load early for faster checkout -->
+    <script src="https://js.stripe.com/v3/" async></script>
+
+    <!-- Prevent FOUC on dark background -->
+    <style>
+      html, body, #root {
+        margin: 0;
+        padding: 0;
+        background: #0a0a0f;
+        min-height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

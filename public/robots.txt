@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Block report pages from indexing — they contain paid customer data
+Disallow: /report/
+
+Sitemap: https://runsitescratch.com/sitemap.xml
