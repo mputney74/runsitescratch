@@ -503,17 +503,23 @@ function formatIntake(fd, vertical, tier) {
     const cph = parseInt(fd.carsPerHour) || 120;
     const opHours = parseInt(fd.operatingHours) || 12;
     const maxCarsDay = cph * opHours;
-    const dailyLow = Math.round(maxCarsDay * 0.25);
-    const dailyHigh = Math.round(maxCarsDay * 0.50);
-    const revCeilLow = dailyLow * 8 * 30;
-    const revCeilHigh = dailyHigh * 14 * 30;
+    const dailyLow = Math.round(maxCarsDay * 0.15);
+    const dailyMid = Math.round(maxCarsDay * 0.22);
+    const dailyHigh = Math.round(maxCarsDay * 0.30);
+    const revPerCarLow = 9;
+    const revPerCarMid = 11;
+    const revPerCarHigh = 12;
+    const revCeilLow = dailyLow * revPerCarLow * 30;
+    const revCeilMid = dailyMid * revPerCarMid * 30;
+    const revCeilHigh = dailyHigh * revPerCarHigh * 30;
     const memberPrice = parseFloat(fd.membershipPrice) || 35;
     const rooftops = parseInt(fd.tradeAreaRooftops) || parseInt(fd.tradeAreaHouseholds) || 15000;
-    const memLow = Math.round(rooftops * 0.01);
-    const memHigh = Math.round(rooftops * 0.03);
+    const memLow = Math.round(rooftops * 0.005);
+    const memMid = Math.round(rooftops * 0.012);
+    const memHigh = Math.round(rooftops * 0.020);
     const competitors = parseInt(fd.competitorCount) || 0;
-    lines.push(`THROUGHPUT NOTE: Tunnel: ${cph} cars/hr x ${opHours} hrs = ${maxCarsDay} max/day. At 25-50% utilization = ${dailyLow}-${dailyHigh} cars/day. Blended rev/car $8-14. REVENUE CEILING: $${revCeilLow.toLocaleString()}-${revCeilHigh.toLocaleString()}/mo. Do NOT exceed $${revCeilHigh.toLocaleString()}/mo.`);
-    lines.push(`MEMBERSHIP NOTE: ~${rooftops.toLocaleString()} rooftops. 1-3% penetration at maturity = ${memLow.toLocaleString()}-${memHigh.toLocaleString()} members x $${memberPrice}/mo = $${(memLow * memberPrice).toLocaleString()}-${(memHigh * memberPrice).toLocaleString()}/mo at MATURITY (18+ mo). Year 1 avg = 50-65% of maturity.${competitors > 2 ? ` ${competitors} competitors nearby — use LOW end.` : ""}`);
+    lines.push(`THROUGHPUT NOTE: Tunnel: ${cph} cars/hr x ${opHours} hrs = ${maxCarsDay.toLocaleString()} max/day. YEAR 1 RAMP (this projection): 15-30% utilization = ${dailyLow}-${dailyHigh} cars/day. Blended rev/car $${revPerCarLow}-${revPerCarHigh} (membership dilutes single-wash pricing — at $${memberPrice}/mo ÷ 3.5 washes = ~$${Math.round(memberPrice / 3.5)} effective per member wash). YEAR 1 REVENUE RANGE: $${revCeilLow.toLocaleString()}-${revCeilHigh.toLocaleString()}/mo. Do NOT exceed $${revCeilHigh.toLocaleString()}/mo — this is a NEW site in ramp, NOT a stabilized operation. Stabilized (Year 2+) at 30-45% utilization would be $${Math.round(maxCarsDay * 0.30 * 11 * 30).toLocaleString()}-${Math.round(maxCarsDay * 0.45 * 13 * 30).toLocaleString()}/mo.`);
+    lines.push(`MEMBERSHIP NOTE: ~${rooftops.toLocaleString()} rooftops in trade area. YEAR 1 penetration: 0.5-2.0% (ramping — maturity at 18+ mo is 2-3%). Year 1 members: ${memLow.toLocaleString()}-${memHigh.toLocaleString()} x $${memberPrice}/mo = $${(memLow * memberPrice).toLocaleString()}-${(memHigh * memberPrice).toLocaleString()}/mo. Membership as % of total wash revenue: 30-45% in Year 1 (vs 50-70% at maturity).${competitors > 2 ? ` ${competitors} competitors nearby — use LOW end of penetration.` : ""}`);
   }
 
   // ── Laundromat ──
@@ -934,15 +940,17 @@ function clampProjections(analysis, fd, vertical) {
   if (vertical === "carwash") {
     const cph = parseInt(fd.carsPerHour) || 120;
     const opHours = parseInt(fd.operatingHours) || 12;
-    const revCeil = Math.round(cph * opHours * 0.50 * 14 * 30);
+    // Year 1 ceiling: 30% utilization × $12 blended rev/car
+    const revCeil = Math.round(cph * opHours * 0.30 * 12 * 30);
     clamp("wash", null, revCeil);
     clamp("revenue", null, revCeil);
     const washKey = Object.keys(p).find(k => k.toLowerCase().includes("wash") || k.toLowerCase().includes("total"));
     const memKey = Object.keys(p).find(k => k.toLowerCase().includes("member"));
     if (washKey && memKey && p[washKey] && p[memKey]) {
-      p[memKey].high = Math.min(p[memKey].high, Math.round(p[washKey].high * 0.70));
-      p[memKey].mid = Math.min(p[memKey].mid, Math.round(p[washKey].mid * 0.65));
-      p[memKey].low = Math.min(p[memKey].low, Math.round(p[washKey].low * 0.55));
+      // Year 1 membership = 30-45% of total wash revenue
+      p[memKey].high = Math.min(p[memKey].high, Math.round(p[washKey].high * 0.45));
+      p[memKey].mid = Math.min(p[memKey].mid, Math.round(p[washKey].mid * 0.38));
+      p[memKey].low = Math.min(p[memKey].low, Math.round(p[washKey].low * 0.30));
     }
   }
 
@@ -1387,8 +1395,10 @@ async function runPipeline(formData, vertical, tier, onProgress) {
   onProgress({ stage: 3, status: "running", msg: "Assembling report..." });
   let configRaw;
   try {
+    const now = new Date();
+    const reportDate = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
     configRaw = await callClaude(S3_SYSTEM,
-      `## SITE INTAKE\n${s2Intake}${aadtSupplement}\n\n## TIER: ${tier}\n\n## MARKET RESEARCH\n${research}\n\n## PROJECTION ANALYSIS\n${JSON.stringify(analysis, null, 2)}\n\n## VERTICAL: ${vb.label}\nRevenue Centers: ${vb.revenueCenters.join(", ")}\n\nAssemble the report config JSON for a ${tier} tier report. Output ONLY valid JSON.`
+      `## SITE INTAKE\n${s2Intake}${aadtSupplement}\n\n## TIER: ${tier}\n\n## TODAY'S DATE: ${reportDate}\nUse this date for the cover page "date" field: "Prepared ${reportDate}"\n\n## MARKET RESEARCH\n${research}\n\n## PROJECTION ANALYSIS\n${JSON.stringify(analysis, null, 2)}\n\n## VERTICAL: ${vb.label}\nRevenue Centers: ${vb.revenueCenters.join(", ")}\n\nAssemble the report config JSON for a ${tier} tier report. Output ONLY valid JSON.`
     );
   } catch (e) { throw new Error(`Assembly failed: ${e.message}`); }
   let config;
