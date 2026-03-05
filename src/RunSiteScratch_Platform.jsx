@@ -944,7 +944,7 @@ Output ONLY valid JSON. No markdown fencing, no commentary.`;
 const S3_SYSTEM = `You are a document assembly engine for RunSiteScratch. You receive a site intake, research brief, projection analysis, and tier level. Assemble a report config JSON.
 
 TIER DETERMINES DEPTH:
-- quick: 7 sections (summary, market, site, primary revenue, secondary revenue, assumptions, disclaimer)
+- quick: 7 sections (summary, market, site, primary revenue, secondary revenue, assumptions, consolidated summary)
 - standard: 9 sections (+ expanded narrative, margin footnotes, consolidated summary)
 - pro: 11 sections (+ trade area analysis, competitive landscape, P&L)
 - decision: 14+ sections (+ 3 scenarios, comparison matrix, analyst recommendation, P&L)
@@ -976,7 +976,7 @@ NARRATIVE RULES:
 - Site-specific: name competitors, roads, employers, geographic features
 - Reference benchmarks with sources (NACS, ICA, CLA, IBISWorld, FDD, etc.)
 - End Executive Summary with footnote about additive vs subset revenue lines
-- Include standard disclaimer section on every report
+- Do NOT generate a disclaimer section — the frontend renders a standard disclaimer automatically.
 - NEVER include any "Market Research Limitation", "Data Limitation", "Research Limitation", or similar disclaimer section. NEVER mention research timeouts, data unavailability, or gaps in market research. Present all projections confidently using available data and benchmarks.
 
 Output ONLY the config JSON. No explanation, no markdown fencing.`;
@@ -2765,7 +2765,7 @@ function ReportViewer({ reportData, formData: fd, vertical, tier, goLanding }) {
 
         {/* Sections */}
         <div style={{ padding: '32px 48px 48px' }}>
-          {config.sections.map((sec, si) => (
+          {config.sections.filter(sec => !sec.title?.toLowerCase().includes('disclaimer')).map((sec, si) => (
             <div key={si} style={{ marginBottom: 36, paddingTop: si > 0 ? 28 : 0, borderTop: si > 0 ? `1px solid #ddd` : 'none' }}>
               <h2 style={{ fontSize: 22, fontWeight: 700, color: C.NAVY, margin: '0 0 16px', fontFamily: "'Georgia', 'Times New Roman', serif", lineHeight: 1.3 }}>
                 <span style={{ color: C.GOLD, fontWeight: 700, marginRight: 10 }}>{sec.number}</span>
@@ -2779,7 +2779,7 @@ function ReportViewer({ reportData, formData: fd, vertical, tier, goLanding }) {
         {/* ─── STANDARD DISCLAIMER ─── */}
         <div style={{ padding: '28px 48px 36px', borderTop: `1px solid #ddd` }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: C.NAVY, margin: '0 0 16px', fontFamily: "'Georgia', 'Times New Roman', serif", lineHeight: 1.3 }}>
-            Disclaimer
+            Standard Disclaimer
           </h2>
           <p style={{ fontSize: 12, color: C.GRAY, lineHeight: 1.7, marginBottom: 14, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
             This analysis has been prepared by RunSiteScratch for informational purposes only and is intended to provide general guidance regarding the potential financial performance of the proposed site. The projections, estimates, and assumptions contained herein are based on information available as of the date of this report and are subject to change without notice.
