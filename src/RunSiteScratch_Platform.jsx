@@ -995,8 +995,8 @@ function clampProjections(analysis, fd, vertical) {
     if (floor !== null) { p[k].low = Math.max(p[k].low, floor); p[k].mid = Math.max(p[k].mid, floor); }
     if (ceil !== null) {
       p[k].high = Math.min(p[k].high, ceil);
-      p[k].mid = Math.min(p[k].mid, ceil * 0.85); // mid should not be near the ceiling
-      p[k].low = Math.min(p[k].low, p[k].mid * 0.75);
+      p[k].mid = Math.round(Math.min(p[k].mid, ceil * 0.85)); // mid should not be near the ceiling
+      p[k].low = Math.round(Math.min(p[k].low, p[k].mid * 0.75));
     }
     // Ensure ordering: low < mid < high
     if (p[k].low >= p[k].mid) p[k].low = Math.round(p[k].mid * 0.75);
@@ -1202,8 +1202,8 @@ function clampProjections(analysis, fd, vertical) {
     else if (sqft <= 8000) minRevPerSF = 20;
     else if (sqft <= 15000) minRevPerSF = 15;
     else minRevPerSF = 12;
-    const revCeil = Math.round(sqft * maxRevPerSF * incomeScalar);
-    const revFloor = Math.round(sqft * minRevPerSF * incomeScalar);
+    const revCeil = sqft * Math.round(maxRevPerSF * incomeScalar);
+    const revFloor = sqft * Math.round(minRevPerSF * incomeScalar);
     clamp("grocery", null, revCeil); clamp("market", null, revCeil);
     clamp("total", null, revCeil); clamp("sales", null, revCeil);
     // Floor enforcement
@@ -1302,8 +1302,8 @@ function clampProjections(analysis, fd, vertical) {
       maxRevPerSF = Math.round(maxRevPerSF * 0.60);
       minRevPerSF = Math.round(minRevPerSF * 0.60);
     }
-    const revCeil = Math.round(sqft * maxRevPerSF * incomeScalar);
-    const revFloor = Math.round(sqft * minRevPerSF * incomeScalar);
+    const revCeil = sqft * Math.round(maxRevPerSF * incomeScalar);
+    const revFloor = sqft * Math.round(minRevPerSF * incomeScalar);
 
     clamp("liquor", null, revCeil);
     clamp("sales", null, revCeil);
