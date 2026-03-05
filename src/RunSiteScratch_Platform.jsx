@@ -1818,7 +1818,7 @@ const VF = {
       { name: "interiorSeats", label: "Interior Seating Capacity", type: "number", placeholder: "48", tier: "quick", required: true, half: true },
       { name: "hasOutdoorSeating", label: "Outdoor / Patio Seating", type: "toggle", tier: "quick" },
       { name: "outdoorSeats", label: "Patio Seats", type: "number", placeholder: "20", tier: "standard", half: true, showIf: "hasOutdoorSeating" },
-      { name: "parkingSpaces", label: "Dedicated Parking Spaces", type: "number", placeholder: "35", tier: "quick", half: true },
+      { name: "parkingSpaces", label: "Dedicated Parking Spaces", type: "number", placeholder: "35", tier: "standard", half: true, hint: "Leave blank if shared lot" },
       { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "0.75", suffix: "acres", tier: "standard", half: true, showIf: "buildingType=freestanding" },
     ]},
     { id: "menu", title: "Menu & Dayparts", n: "03", fields: [
@@ -2294,7 +2294,7 @@ function ProcessingScreen({ formData, tier, vertical, siteCount, onComplete, onE
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
       <div style={{ fontSize: 11, fontWeight: 700, color: T.accent, letterSpacing: "0.15em", marginBottom: 8 }}>GENERATING {tierLabel}</div>
       <h1 style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)", fontWeight: 900, letterSpacing: "-0.03em", marginBottom: 12, textAlign: "center" }}>{siteName}</h1>
-      <div style={{ fontSize: 12, color: "#555568", marginBottom: 40 }}>Live market research · Site-specific projections · Professional report</div>
+      <div style={{ fontSize: 15, color: "#555568", marginBottom: 40 }}>Live market research · Site-specific projections · Professional report</div>
       <div style={{ maxWidth: 480, width: "100%" }}>
         {stages.map(s => (
           <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 16, padding: "16px 0", borderBottom: "1px solid #1a1a24" }}>
@@ -2528,33 +2528,6 @@ function ReportViewer({ reportData, formData: fd, vertical, tier, goLanding }) {
           <span style={{ fontSize: 10, color: C.GRAY }}>{tierLabel}</span>
         </div>
       </div>
-
-      {/* ─── AUTO-PULL INDICATOR ─── */}
-      {autoPull && (autoPull.aadt || autoPull.truckPct || autoPull.hwyAadt || autoPull.hwyTruckPct) && (() => {
-        const items = [];
-        if (autoPull.aadt) items.push(`Surface Road AADT: ~${autoPull.aadt.toLocaleString()} vpd`);
-        if (autoPull.truckPct) items.push(`Truck Traffic: ~${autoPull.truckPct}%`);
-        if (autoPull.hwyAadt) items.push(`Highway AADT: ~${autoPull.hwyAadt.toLocaleString()} vpd`);
-        if (autoPull.hwyTruckPct) items.push(`Highway Truck: ~${autoPull.hwyTruckPct}%`);
-        return (
-          <div style={{ ...pageStyle, marginTop: 16, padding: 0, background: '#FEFCF3' }}>
-            <div style={{ padding: '16px 48px', borderLeft: `4px solid ${C.GOLD}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 14 }}>⚑</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: C.NAVY, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>Auto-Derived Traffic Data</span>
-              </div>
-              <p style={{ fontSize: 12, color: '#555', margin: '0 0 6px', fontFamily: "'Calibri', 'Segoe UI', sans-serif", lineHeight: 1.6 }}>
-                The following traffic values were not provided in the site intake and were automatically extracted from Stage 1 market research. These estimates are used in fuel volume and revenue modeling. For higher confidence, re-run with verified DOT traffic counts.
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
-                {items.map((item, i) => (
-                  <span key={i} style={{ fontSize: 12, fontWeight: 600, color: C.NAVY, background: '#F0EDE4', padding: '4px 12px', borderRadius: 3, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>{item}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* ─── ACTION BAR ─── */}
       <div style={{ maxWidth: 816, margin: '24px auto 48px', textAlign: 'center' }}>
