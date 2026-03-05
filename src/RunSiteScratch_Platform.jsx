@@ -2583,7 +2583,8 @@ function ReportViewer({ reportData, formData: fd, vertical, tier, goLanding }) {
   const siteName = config?.cover?.title || fd.projectName || fd.crossStreets || fd.address || "Your Site";
   const tierLabel = { quick: "Quick Scan", standard: "Standard Report", pro: "Pro Detail", decision: "Decision Package" }[tier];
   const coverDate = config?.cover?.date || new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  const subtitle = config?.cover?.subtitle || (VERT_BENCHMARKS[vertical]?.label?.toUpperCase() + " PROJECTIONS");
+  const VERT_LABELS = { cstore: "Fuel & Convenience Store", travel: "Travel Center", qsr: "Quick-Service Restaurant", liquor: "Liquor Store", carwash: "Express Car Wash", laundromat: "Laundromat", grocery: "Grocery Market" };
+  const subtitle = (VERT_LABELS[vertical] || VERT_BENCHMARKS[vertical]?.label || vertical).toUpperCase() + " PROJECTIONS";
 
   // Midnight Executive tokens — matching buildProjection.js exactly
   const C = { NAVY: '#0B1120', GOLD: '#C9A227', RED: '#B03030', WHITE: '#FFFFFF', DARK: '#1A1A1A', GRAY: '#6B6B6B', BORDER: '#2A3754', CREAM: '#F9F6F0', DESK: '#E8E4DC' };
@@ -2730,9 +2731,9 @@ function ReportViewer({ reportData, formData: fd, vertical, tier, goLanding }) {
         {/* Navy Header Band — top ~37% */}
         <div style={{ background: C.NAVY, padding: '60px 60px 48px', flex: '0 0 37%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
           <div style={{ borderBottom: `2px solid ${C.GOLD}`, paddingBottom: 16, marginBottom: 20 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: C.GOLD, letterSpacing: '0.2em' }}>RUNSITESCRATCH</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.GOLD, letterSpacing: '0.2em' }}>RUNSITESCRATCH</span>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.GOLD, letterSpacing: '0.12em', marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.GOLD, letterSpacing: '0.12em', marginBottom: 12 }}>
             {subtitle}
           </div>
           <h1 style={{ fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 800, color: C.WHITE, margin: 0, fontFamily: "'Playfair Display', Georgia, serif", lineHeight: 1.2 }}>
@@ -2758,7 +2759,7 @@ function ReportViewer({ reportData, formData: fd, vertical, tier, goLanding }) {
       <div style={{ ...pageStyle, marginTop: 24, padding: '0' }}>
         {/* Running Header */}
         <div style={{ padding: '20px 48px 12px', borderBottom: `2px solid ${C.GOLD}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: C.GOLD, letterSpacing: '0.14em' }}>RUNSITESCRATCH</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: C.GOLD, letterSpacing: '0.14em' }}>RUNSITESCRATCH</span>
           <span style={{ fontSize: 11, fontStyle: 'italic', color: C.GRAY }}>{config?.headerSubtitle || tierLabel}</span>
         </div>
 
@@ -2773,6 +2774,34 @@ function ReportViewer({ reportData, formData: fd, vertical, tier, goLanding }) {
               {sec.content?.map((c, ci) => renderContent(c, ci))}
             </div>
           ))}
+        </div>
+
+        {/* ─── STANDARD DISCLAIMER ─── */}
+        <div style={{ padding: '28px 48px 36px', borderTop: `1px solid #ddd` }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.NAVY, margin: '0 0 16px', fontFamily: "'Georgia', 'Times New Roman', serif", lineHeight: 1.3 }}>
+            Disclaimer
+          </h2>
+          <p style={{ fontSize: 12, color: C.GRAY, lineHeight: 1.7, marginBottom: 14, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
+            This analysis has been prepared by RunSiteScratch for informational purposes only and is intended to provide general guidance regarding the potential financial performance of the proposed site. The projections, estimates, and assumptions contained herein are based on information available as of the date of this report and are subject to change without notice.
+          </p>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.NAVY, marginBottom: 4, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
+            <span style={{ color: C.GOLD, marginRight: 6 }}>◆</span>Forward-Looking Statements
+          </p>
+          <p style={{ fontSize: 12, color: C.GRAY, lineHeight: 1.7, marginBottom: 14, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
+            This report contains forward-looking statements and projections that involve risks, uncertainties, and assumptions. Actual results may differ materially from those projected due to various factors including but not limited to changes in economic conditions, competition, regulatory environment, consumer preferences, fuel costs, and operational execution. No representation or warranty is made regarding the accuracy or completeness of the information presented.
+          </p>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.NAVY, marginBottom: 4, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
+            <span style={{ color: C.GOLD, marginRight: 6 }}>◆</span>No Investment Advice
+          </p>
+          <p style={{ fontSize: 12, color: C.GRAY, lineHeight: 1.7, marginBottom: 14, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
+            This report does not constitute investment advice, a recommendation to purchase or lease real estate, or an offer to sell securities. Recipients should conduct their own due diligence and consult with qualified professionals including attorneys, accountants, and financial advisors before making investment decisions. Past performance of similar projects does not guarantee future results.
+          </p>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.NAVY, marginBottom: 4, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
+            <span style={{ color: C.GOLD, marginRight: 6 }}>◆</span>Limitation of Liability
+          </p>
+          <p style={{ fontSize: 12, color: C.GRAY, lineHeight: 1.7, marginBottom: 0, fontFamily: "'Calibri', 'Segoe UI', sans-serif" }}>
+            RunSiteScratch shall not be liable for any direct, indirect, incidental, special, or consequential damages arising from the use of this information. The user assumes all responsibility for the use of this report and acknowledges that business operations involve inherent risks that cannot be eliminated regardless of the care taken in preparation and execution.
+          </p>
         </div>
 
         {/* Running Footer */}
