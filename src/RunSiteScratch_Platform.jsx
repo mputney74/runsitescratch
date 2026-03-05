@@ -349,7 +349,7 @@ function validateIntake(fd, vertical) {
 
   // ═══ CRITICAL: Square footage ═══
   const sqft = parseInt(fd.storeSqft || fd.totalSqFt);
-  if (vertical && !["qsr"].includes(vertical)) {
+  if (vertical && !["qsr", "carwash"].includes(vertical)) {
     if (!sqft || sqft <= 0) err("storeSqft", "Square footage is missing or zero. This drives revenue ceilings.");
     else if (sqft < 200) err("storeSqft", `Square footage (${sqft}) is suspiciously low. Verify this isn't a placeholder.`);
   }
