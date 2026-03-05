@@ -381,12 +381,6 @@ function validateIntake(fd, vertical) {
       warn("fuelPositions", "Fuel positions is blank or zero but fuel is enabled. Fuel revenue ceiling will be $0.");
   }
 
-  // ═══ HIGH: AADT on fuel-dependent verticals ═══
-  const fuelVerts = ["cstore", "travel"];
-  if ((fuelVerts.includes(vertical) || (vertical === "grocery" && fd.hasFuel)) && !parseInt(fd.aadt)) {
-    warn("aadt", "AADT is blank on a fuel-dependent vertical. We'll attempt to auto-pull from research, but a known value is more reliable.");
-  }
-
   return { valid: errors.length === 0, errors, warnings };
 }
 
@@ -633,13 +627,34 @@ function formatIntake(fd, vertical, tier) {
     const formatLabel = formatLabels[fd.groceryFormat] || fd.groceryFormat || "Grocery";
     const ownership = fd.brandOrIndependent === "chain" ? (fd.groceryBanner === "other" ? fd.groceryBannerOther : fd.groceryBanner) : (fd.storeName || "Independent");
     lines.push(`FORMAT SUMMARY: ${formatLabel} — ${ownership}. ${sqft.toLocaleString()} SF.${fd.ethnicFocus ? " Ethnic focus: " + fd.ethnicFocus + "." : ""}${fd.hasWIC ? " WIC accepted." : ""}${fd.hasEBT ? " EBT/SNAP accepted." : ""}${fd.hasMoneyServices ? " Money services (wire transfer, check cashing)." : ""}${fd.hasBeer ? " Beer/wine." : ""}${fd.hasLiquor ? " Liquor." : ""}`);
+
+    // Income scaling for grocery
+    const mhi = parseInt(fd.medianHouseholdIncome) || parseInt(fd.mhi) || 0;
+    let incomeScalar = 1.0;
+    let incomeNote = "";
+    if (mhi > 0) {
+      if (mhi < 35000) { incomeScalar = 0.80; incomeNote = ` Lower-income market (MHI ~$${(mhi/1000).toFixed(0)}K) — basket size ~80% of national avg. EBT/SNAP likely significant share of transactions.`; }
+      else if (mhi < 45000) { incomeScalar = 0.88; incomeNote = ` Moderate-income market (MHI ~$${(mhi/1000).toFixed(0)}K) — basket size ~88% of national avg.`; }
+      else if (mhi < 55000) { incomeScalar = 0.93; incomeNote = ` Near-median income (MHI ~$${(mhi/1000).toFixed(0)}K).`; }
+      else if (mhi < 70000) { incomeScalar = 0.97; }
+      if (isCarniceria && incomeScalar < 0.93) incomeScalar = Math.max(incomeScalar, 0.88);
+    }
+
     let rLow, rHigh, fmt;
     if (sqft <= 3000) { rLow = 15; rHigh = 27; fmt = "small"; }
     else if (sqft <= 5000) { rLow = 18; rHigh = 30; fmt = "mid"; }
     else if (sqft <= 8000) { rLow = 20; rHigh = 35; fmt = "full grocery"; }
     else if (sqft <= 15000) { rLow = 15; rHigh = 25; fmt = "large-format grocery"; }
     else { rLow = 12; rHigh = 20; fmt = "small supermarket"; }
-    lines.push(`REVENUE/SF NOTE: ${fmt} at ${sqft.toLocaleString()} SF. Range: $${rLow}-${rHigh}/SF/mo. Total grocery: $${(sqft * rLow).toLocaleString()}-${(sqft * rHigh).toLocaleString()}/mo. Do NOT exceed $${(sqft * rHigh).toLocaleString()}/mo.`);
+
+    const adjRLow = Math.round(rLow * incomeScalar);
+    const adjRHigh = Math.round(rHigh * incomeScalar);
+    const adjRTarget = Math.round((rLow + rHigh) / 2 * incomeScalar);
+    const revFloor = sqft * adjRLow;
+    const revTarget = sqft * adjRTarget;
+    const revCeil = sqft * adjRHigh;
+    lines.push(`REVENUE/SF NOTE: ${fmt} at ${sqft.toLocaleString()} SF. Rev/SF: $${adjRLow}-${adjRHigh}/mo. PROJECTED RANGE: $${revFloor.toLocaleString()}-${revCeil.toLocaleString()}/mo. TARGET MID-POINT: ~$${revTarget.toLocaleString()}/mo. Your low scenario should be near $${revFloor.toLocaleString()}, your mid near $${revTarget.toLocaleString()}, and your high near $${revCeil.toLocaleString()}. Do NOT project below $${revFloor.toLocaleString()}/mo. Do NOT exceed $${revCeil.toLocaleString()}/mo.${incomeNote}`);
+
     if (hasPrep) {
       const prepDetails = [];
       if (fd.hasDeli && (fd.deliType === "hot_bar" || fd.deliType === "full_deli")) prepDetails.push(fd.deliType === "full_deli" ? "full deli (cold + hot + made-to-order)" : "hot bar / steam table");
@@ -666,15 +681,14 @@ function formatIntake(fd, vertical, tier) {
     if (hasFuel) {
       const pos = parseInt(fd.fuelPositions) || 4;
       const brand = fd.fuelBrand || "Unbranded";
-      const aadt = parseInt(fd.aadt) || 0;
-      if (aadt > 0) {
-      const factor = (pos / 8) * (aadt / 25000);
-      const gLow = Math.round(117000 * factor * 0.6);
-      const gHigh = Math.round(117000 * factor * 1.1);
-      lines.push(`FUEL NOTE: ${pos}-position forecourt, ${brand}. Auto gasoline ONLY — no diesel/truck. Est ${gLow.toLocaleString()}-${gHigh.toLocaleString()} gal/mo. Fuel is ADDITIVE to grocery sales — separate revenue center.`);
-      } else {
-        lines.push(`FUEL NOTE: ${pos}-position forecourt, ${brand}. Auto gasoline ONLY. AADT not provided by client. S1 research should supply traffic count for fuel volume estimation. Fuel is ADDITIVE to grocery sales.`);
-      }
+      const BENCHMARK_GAL = 117000;
+      const BENCHMARK_POS = 8;
+      const scaledBase = Math.round(BENCHMARK_GAL * (pos / BENCHMARK_POS));
+      const grocFuelMod = 0.65;
+      const gFloor = Math.round(scaledBase * grocFuelMod * 0.75);
+      const gTarget = Math.round(scaledBase * grocFuelMod * 0.90);
+      const gCeil = Math.round(scaledBase * grocFuelMod * 1.05);
+      lines.push(`FUEL NOTE: ${pos}-position forecourt, ${brand}. Auto gasoline ONLY — no diesel/truck. Grocery fuel typically runs 60-70% of c-store fuel volume (not a fuel-destination stop). PROJECTED RANGE: ${gFloor.toLocaleString()}-${gCeil.toLocaleString()} gal/mo. Target ~${gTarget.toLocaleString()} gal/mo. Fuel is ADDITIVE to grocery sales — separate revenue center.`);
     }
   }
 
@@ -739,15 +753,32 @@ function formatIntake(fd, vertical, tier) {
     const productFocus = fd.productFocus || "full_range";
     const brand = fd.storeBrand || "Independent";
 
+    // Income scaling — liquor is HIGHLY income-elastic (premium spirits, wine)
+    const mhi = parseInt(fd.medianHouseholdIncome) || parseInt(fd.mhi) || 0;
+    let incomeScalar = 1.0;
+    let incomeNote = "";
+    if (mhi > 0) {
+      if (mhi < 40000) { incomeScalar = 0.70; incomeNote = ` Lower-income market (MHI ~$${(mhi/1000).toFixed(0)}K) — heavy beer/value spirits skew, minimal premium wine. Rev/SF ~70% of national avg.`; }
+      else if (mhi < 50000) { incomeScalar = 0.80; incomeNote = ` Moderate-income market (MHI ~$${(mhi/1000).toFixed(0)}K) — value-oriented mix. Rev/SF ~80% of national avg.`; }
+      else if (mhi < 60000) { incomeScalar = 0.90; incomeNote = ` Near-median income (MHI ~$${(mhi/1000).toFixed(0)}K). Rev/SF ~90% of national avg.`; }
+      else if (mhi < 75000) { incomeScalar = 0.95; }
+      else if (mhi >= 100000) { incomeScalar = 1.10; incomeNote = ` High-income market (MHI ~$${(mhi/1000).toFixed(0)}K) — premium spirits/wine heavy, higher avg transaction.`; }
+    }
+
     let rLow, rHigh, tierLabel;
     if (sqft <= 2000) { rLow = 22; rHigh = 35; tierLabel = "small neighborhood"; }
     else if (sqft <= 3500) { rLow = 25; rHigh = 40; tierLabel = "mid-format"; }
     else if (sqft <= 5000) { rLow = 25; rHigh = 38; tierLabel = "standard"; }
     else { rLow = 20; rHigh = 32; tierLabel = "large format"; }
 
-    const revLow = sqft * rLow;
-    const revHigh = sqft * rHigh;
-    lines.push(`REVENUE NOTE: ${tierLabel} liquor store at ${sqft.toLocaleString()} SF. Rev/SF: $${rLow}-${rHigh}/mo. Total range: $${revLow.toLocaleString()}-${revHigh.toLocaleString()}/mo. Do NOT exceed $${revHigh.toLocaleString()}/mo.`);
+    const adjRLow = Math.round(rLow * incomeScalar);
+    const adjRHigh = Math.round(rHigh * incomeScalar);
+    const adjRTarget = Math.round((rLow + rHigh) / 2 * incomeScalar);
+    const revFloor = sqft * adjRLow;
+    const revTarget = sqft * adjRTarget;
+    const revCeil = sqft * adjRHigh;
+
+    lines.push(`REVENUE NOTE: ${tierLabel} liquor store at ${sqft.toLocaleString()} SF. Base rev/SF: $${rLow}-${rHigh}/mo. Income-adjusted rev/SF: $${adjRLow}-${adjRHigh}/mo. PROJECTED RANGE: $${revFloor.toLocaleString()}-${revCeil.toLocaleString()}/mo. TARGET MID-POINT: ~$${revTarget.toLocaleString()}/mo. Your low scenario should be near $${revFloor.toLocaleString()}, your mid near $${revTarget.toLocaleString()}, and your high near $${revCeil.toLocaleString()}. Do NOT project below $${revFloor.toLocaleString()}/mo. Do NOT exceed $${revCeil.toLocaleString()}/mo.${incomeNote}`);
 
     if (hasBeerCave) {
       lines.push(`BEER CAVE NOTE: Customer-facing walk-in beer cave present. Beer caves add 25-40% to beer category revenue vs cooler-door-only. Expect beer share of 30-38% of total sales (vs 25-30% without cave).`);
@@ -758,6 +789,17 @@ function formatIntake(fd, vertical, tier) {
       format === "strip" ? "Strip center / inline — dependent on anchor traffic and parking." :
       "Standalone location — dependent on destination traffic and visibility.";
     lines.push(`FORMAT NOTE: ${formatNote} Brand: ${brand}. Product focus: ${productFocus}.`);
+
+    const comp1 = fd.comp1 || "";
+    const comp2 = fd.comp2 || "";
+    const comp3 = fd.comp3 || "";
+    const compCount = [comp1, comp2, comp3].filter(c => c.length > 0).length;
+    if (compCount > 0) {
+      let compNote = `COMPETITION NOTE: ${compCount} competitor${compCount > 1 ? "s" : ""} identified within trade area.`;
+      if (compCount >= 3) compNote += " Saturated competitive environment — project toward lower end of rev/SF range.";
+      else if (compCount === 1) compNote += " Limited direct competition — favorable for market share capture.";
+      lines.push(compNote);
+    }
 
     if (fd.licenseType === "beer_wine_only") {
       lines.push(`LICENSE NOTE: Beer & wine ONLY — no spirits license. Spirits = 40-50% of typical liquor store revenue. Revenue ceiling is 50-60% of a full-package store. Adjust total projection downward accordingly.`);
@@ -1135,20 +1177,47 @@ function clampProjections(analysis, fd, vertical) {
     }
   }
 
-  // Grocery: revenue/SF ceiling + prepared food cap + fuel cap
+  // Grocery — income-scaled rev/SF ceiling + floor
   if (vertical === "grocery") {
     const sqft = parseInt(fd.storeSqft) || 3000;
+    const mhi = parseInt(fd.medianHouseholdIncome) || parseInt(fd.mhi) || 0;
+    const isCarniceria = fd.groceryFormat === "carniceria";
+    let incomeScalar = 1.0;
+    if (mhi > 0) {
+      if (mhi < 35000) incomeScalar = 0.80;
+      else if (mhi < 45000) incomeScalar = 0.88;
+      else if (mhi < 55000) incomeScalar = 0.93;
+      else if (mhi < 70000) incomeScalar = 0.97;
+      if (isCarniceria && incomeScalar < 0.93) incomeScalar = Math.max(incomeScalar, 0.88);
+    }
     let maxRevPerSF;
     if (sqft <= 3000) maxRevPerSF = 27;
     else if (sqft <= 5000) maxRevPerSF = 30;
     else if (sqft <= 8000) maxRevPerSF = 35;
     else if (sqft <= 15000) maxRevPerSF = 25;
     else maxRevPerSF = 20;
-    const revCeil = sqft * maxRevPerSF;
+    let minRevPerSF;
+    if (sqft <= 3000) minRevPerSF = 15;
+    else if (sqft <= 5000) minRevPerSF = 18;
+    else if (sqft <= 8000) minRevPerSF = 20;
+    else if (sqft <= 15000) minRevPerSF = 15;
+    else minRevPerSF = 12;
+    const revCeil = Math.round(sqft * maxRevPerSF * incomeScalar);
+    const revFloor = Math.round(sqft * minRevPerSF * incomeScalar);
     clamp("grocery", null, revCeil); clamp("market", null, revCeil);
     clamp("total", null, revCeil); clamp("sales", null, revCeil);
-    const prepKey = Object.keys(p).find(k => { const l = k.toLowerCase(); return l.includes("prepared") || l.includes("hot bar") || l.includes("taqueria") || l.includes("hot food"); });
+    // Floor enforcement
     const salesKey = Object.keys(p).find(k => { const l = k.toLowerCase(); return (l.includes("grocery") || l.includes("market") || l.includes("total") || l.includes("sales")) && !l.includes("prepared") && !l.includes("hot") && !l.includes("fuel") && !l.includes("gas"); });
+    if (salesKey && p[salesKey]) {
+      if (p[salesKey].low < revFloor) {
+        p[salesKey].low = revFloor;
+        p[salesKey].mid = Math.max(p[salesKey].mid, Math.round(revFloor * 1.15));
+        p[salesKey].high = Math.max(p[salesKey].high, Math.round(revFloor * 1.35));
+        if (p[salesKey].high > revCeil) p[salesKey].high = revCeil;
+        if (p[salesKey].mid > p[salesKey].high) p[salesKey].mid = Math.round(p[salesKey].high * 0.88);
+      }
+    }
+    const prepKey = Object.keys(p).find(k => { const l = k.toLowerCase(); return l.includes("prepared") || l.includes("hot bar") || l.includes("taqueria") || l.includes("hot food"); });
     if (prepKey && salesKey && p[salesKey]) {
       const prepCeil = Math.round(p[salesKey].mid * 0.10);
       if (p[prepKey].high > prepCeil) {
@@ -1159,10 +1228,13 @@ function clampProjections(analysis, fd, vertical) {
       if (p[prepKey].low >= p[prepKey].mid) p[prepKey].low = Math.round(p[prepKey].mid * 0.75);
       if (p[prepKey].mid >= p[prepKey].high) p[prepKey].high = Math.round(p[prepKey].mid * 1.2);
     }
-    if (fd.hasFuel && parseInt(fd.aadt) > 0) {
+    if (fd.hasFuel) {
       const pos = parseInt(fd.fuelPositions) || 4;
-      const aadt = parseInt(fd.aadt);
-      const gasCeil = Math.round(117000 * (pos / 8) * (aadt / 25000) * 1.3);
+      const BENCHMARK_GAL = 117000;
+      const BENCHMARK_POS = 8;
+      const scaledBase = Math.round(BENCHMARK_GAL * (pos / BENCHMARK_POS));
+      const grocFuelMod = 0.65;
+      const gasCeil = Math.round(scaledBase * grocFuelMod * 1.05);
       clamp("gasoline", null, gasCeil); clamp("fuel", null, gasCeil); clamp("gas", null, gasCeil);
     }
   }
@@ -1209,22 +1281,50 @@ function clampProjections(analysis, fd, vertical) {
     }
   }
 
-  // Liquor
+  // Liquor — income-scaled rev/SF ceiling + floor
   if (vertical === "liquor") {
     const sqft = parseInt(fd.storeSqft) || 2500;
-    let maxRevPerSF;
-    if (sqft <= 2000) maxRevPerSF = 35;
-    else if (sqft <= 3500) maxRevPerSF = 40;
-    else if (sqft <= 5000) maxRevPerSF = 38;
-    else maxRevPerSF = 32;
-    if (fd.licenseType === "beer_wine_only") maxRevPerSF = Math.round(maxRevPerSF * 0.60);
+    const mhi = parseInt(fd.medianHouseholdIncome) || parseInt(fd.mhi) || 0;
+    let incomeScalar = 1.0;
+    if (mhi > 0) {
+      if (mhi < 40000) incomeScalar = 0.70;
+      else if (mhi < 50000) incomeScalar = 0.80;
+      else if (mhi < 60000) incomeScalar = 0.90;
+      else if (mhi < 75000) incomeScalar = 0.95;
+      else if (mhi >= 100000) incomeScalar = 1.10;
+    }
+    let maxRevPerSF, minRevPerSF;
+    if (sqft <= 2000) { maxRevPerSF = 35; minRevPerSF = 22; }
+    else if (sqft <= 3500) { maxRevPerSF = 40; minRevPerSF = 25; }
+    else if (sqft <= 5000) { maxRevPerSF = 38; minRevPerSF = 25; }
+    else { maxRevPerSF = 32; minRevPerSF = 20; }
+    if (fd.licenseType === "beer_wine_only") {
+      maxRevPerSF = Math.round(maxRevPerSF * 0.60);
+      minRevPerSF = Math.round(minRevPerSF * 0.60);
+    }
+    const revCeil = Math.round(sqft * maxRevPerSF * incomeScalar);
+    const revFloor = Math.round(sqft * minRevPerSF * incomeScalar);
 
-    const revCeil = sqft * maxRevPerSF;
     clamp("liquor", null, revCeil);
     clamp("sales", null, revCeil);
     clamp("total", null, revCeil);
     clamp("revenue", null, revCeil);
     clamp("store", null, revCeil);
+
+    // Floor enforcement
+    const liqKey = Object.keys(p).find(k => {
+      const l = k.toLowerCase();
+      return l.includes("liquor") || l.includes("sales") || l.includes("total") || l.includes("store") || l.includes("revenue");
+    });
+    if (liqKey && p[liqKey]) {
+      if (p[liqKey].low < revFloor) {
+        p[liqKey].low = revFloor;
+        p[liqKey].mid = Math.max(p[liqKey].mid, Math.round(revFloor * 1.15));
+        p[liqKey].high = Math.max(p[liqKey].high, Math.round(revFloor * 1.35));
+        if (p[liqKey].high > revCeil) p[liqKey].high = revCeil;
+        if (p[liqKey].mid > p[liqKey].high) p[liqKey].mid = Math.round(p[liqKey].high * 0.88);
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════════
