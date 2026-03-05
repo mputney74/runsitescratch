@@ -285,7 +285,10 @@ function coordsFromFd(fd) {
 function normalizeFormData(fd, vertical) {
   const n = { ...fd };
   if (vertical === "carwash") {
-    if (!n.carsPerHour && n.throughputTarget) n.carsPerHour = n.throughputTarget;
+    if (!n.carsPerHour) {
+      const classMap = { "standard": 110, "high_performance": 140, "premium": 170 };
+      n.carsPerHour = classMap[n.tunnelClass] || (n.throughputTarget ? n.throughputTarget : 120);
+    }
     if (!n.operatingHours && n.hours) {
       const hoursMap = { "dawn_dusk": 13, "extended_wash": 14, "24hr": 18, "custom": 12 };
       n.operatingHours = hoursMap[n.hours] || 12;
@@ -518,7 +521,7 @@ function formatIntake(fd, vertical, tier) {
     const memMid = Math.round(rooftops * 0.012);
     const memHigh = Math.round(rooftops * 0.020);
     const competitors = parseInt(fd.competitorCount) || 0;
-    lines.push(`THROUGHPUT NOTE: Tunnel: ${cph} cars/hr x ${opHours} hrs = ${maxCarsDay.toLocaleString()} max/day. YEAR 1 RAMP (this projection): 15-30% utilization = ${dailyLow}-${dailyHigh} cars/day. Blended rev/car $${revPerCarLow}-${revPerCarHigh} (membership dilutes single-wash pricing — at $${memberPrice}/mo ÷ 3.5 washes = ~$${Math.round(memberPrice / 3.5)} effective per member wash). YEAR 1 REVENUE RANGE: $${revCeilLow.toLocaleString()}-${revCeilHigh.toLocaleString()}/mo. Do NOT exceed $${revCeilHigh.toLocaleString()}/mo — this is a NEW site in ramp, NOT a stabilized operation. Stabilized (Year 2+) at 30-45% utilization would be $${Math.round(maxCarsDay * 0.30 * 11 * 30).toLocaleString()}-${Math.round(maxCarsDay * 0.45 * 13 * 30).toLocaleString()}/mo.`);
+    lines.push(`THROUGHPUT NOTE: Tunnel: ${cph} cars/hr x ${opHours} hrs = ${maxCarsDay.toLocaleString()} max/day. YEAR 1 RAMP (this projection): 15-30% utilization = ${dailyLow}-${dailyHigh} cars/day. Blended rev/car $${revPerCarLow}-${revPerCarHigh} (membership dilutes single-wash pricing — at $${memberPrice}/mo ÷ 3.5 washes = ~$${Math.round(memberPrice / 3.5)} effective per member wash). YEAR 1 REVENUE RANGE: $${revCeilLow.toLocaleString()}-${revCeilHigh.toLocaleString()}/mo. Do NOT exceed $${revCeilHigh.toLocaleString()}/mo — this is a NEW site in ramp, NOT a stabilized operation. Stabilized (Year 2+): 15-25% growth over Year 1 = $${Math.round(revCeilHigh * 1.15).toLocaleString()}-${Math.round(revCeilHigh * 1.25).toLocaleString()}/mo.`);
     lines.push(`MEMBERSHIP NOTE: ~${rooftops.toLocaleString()} rooftops in trade area. YEAR 1 penetration: 0.5-2.0% (ramping — maturity at 18+ mo is 2-3%). Year 1 members: ${memLow.toLocaleString()}-${memHigh.toLocaleString()} x $${memberPrice}/mo = $${(memLow * memberPrice).toLocaleString()}-${(memHigh * memberPrice).toLocaleString()}/mo. Membership as % of total wash revenue: 30-45% in Year 1 (vs 50-70% at maturity).${competitors > 2 ? ` ${competitors} competitors nearby — use LOW end of penetration.` : ""}`);
   }
 
@@ -2060,10 +2063,12 @@ const VF = {
         { value: "express_tunnel", label: "Express Tunnel" }, { value: "flex_serve", label: "Flex Serve (tunnel + detail)" },
         { value: "inbay_auto", label: "In-Bay Automatic" }, { value: "self_serve", label: "Self-Serve Bays" },
       ]},
-      { name: "tunnelLength", label: "Tunnel Length", type: "number", placeholder: "140", suffix: "ft", tier: "quick", half: true, showIf: "washType=express_tunnel||washType=flex_serve" },
-      { name: "throughputTarget", label: "Target Throughput", type: "number", placeholder: "130", suffix: "cars/hr", tier: "quick", half: true, showIf: "washType=express_tunnel||washType=flex_serve" },
+      { name: "tunnelClass", label: "Tunnel Class", type: "radio", tier: "quick", required: true, showIf: "washType=express_tunnel||washType=flex_serve", options: [
+        { value: "standard", label: "Standard Tunnel (80–120 ft, ~110 cars/hr)" },
+        { value: "high_performance", label: "High-Performance Tunnel (120–150 ft, ~140 cars/hr)" },
+        { value: "premium", label: "Premium / Mega Tunnel (150+ ft, ~170 cars/hr)" },
+      ]},
       { name: "selfServeBays", label: "Number of Bays", type: "number", placeholder: "4", tier: "quick", half: true, showIf: "washType=self_serve||washType=inbay_auto" },
-      { name: "stackingCapacity", label: "Stacking Capacity", type: "number", placeholder: "20", suffix: "cars", tier: "quick", half: true, hint: "Queue length before overflow to street" },
       { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "1.2", suffix: "acres", tier: "standard", half: true },
       { name: "yearBuilt", label: "Year Built", type: "number", placeholder: "2026", tier: "standard", half: true },
       { name: "equipmentBrand", label: "Equipment Brand", type: "text", placeholder: "e.g. Tommy's, Sonny's, PDQ, MacNeil", tier: "standard" },
