@@ -1054,7 +1054,7 @@ function clampProjections(analysis, fd, vertical) {
     const gasCeil = Math.round(scaledBase * totalAdj * 1.05);
     clamp("gasoline", null, gasCeil);
     const gasOnlyKey = Object.keys(p).find(k => k.toLowerCase().includes("gasoline") || (k.toLowerCase().includes("gas") && !k.toLowerCase().includes("diesel")));
-    if (gasOnlyKey && p[gasOnlyKey] && (p[gasOnlyKey].unit || "").toLowerCase().includes("gal")) {
+    if (gasOnlyKey && p[gasOnlyKey]) {
       if (p[gasOnlyKey].high > gasCeil) {
         p[gasOnlyKey].high = gasCeil;
         p[gasOnlyKey].mid = Math.min(p[gasOnlyKey].mid, Math.round(gasCeil * 0.85));
@@ -1367,8 +1367,7 @@ function clampProjections(analysis, fd, vertical) {
       const maxGasGal = Math.round(dailyFuelCust * 10.5 * 30 * 1.25);
       const gasKey = findKey(["gasoline"]);
       if (gasKey && p[gasKey]) {
-        const u = (p[gasKey].unit || "").toLowerCase();
-        if (u.includes("gal")) applyTxnClamp(gasKey, maxGasGal);
+        applyTxnClamp(gasKey, maxGasGal);
       }
 
       if (fd.hasDiesel && !fd.hasHighFlowDiesel) {
@@ -1377,15 +1376,19 @@ function clampProjections(analysis, fd, vertical) {
         const maxDieselGal = Math.round(dieselCust * 15 * 30 * 1.5);
         const dieselKey = findKey(["diesel"]);
         if (dieselKey && p[dieselKey]) {
-          const u = (p[dieselKey].unit || "").toLowerCase();
-          if (u.includes("gal")) applyTxnClamp(dieselKey, maxDieselGal);
+          applyTxnClamp(dieselKey, maxDieselGal);
         }
       }
     } else {
       const gasKey = findKey(["gasoline"]);
       if (gasKey && p[gasKey] && p[gasKey].mid > 0) {
         const impliedDailyFills = p[gasKey].mid / 10.5 / 30;
-        const dailyInStore = Math.round(impliedDailyFills * IN_STORE_CONV);
+        let walkInMult = 1.2;
+        if (fd.hasRollerGrill) walkInMult = 1.3;
+        if (fd.hasHotExpress) walkInMult = 1.5;
+        if (fd.hasFullKitchen && !fd.hasBrandedFastFood) walkInMult = 1.7;
+        if (fd.hasFullKitchen && fd.hasBrandedFastFood) walkInMult = 1.9;
+        const dailyInStore = Math.round(impliedDailyFills * IN_STORE_CONV * walkInMult);
         if (dailyInStore > 0) {
           const maxMonthlyInStore = dailyInStore * MAX_BASKET * 30;
           const storeKey = findKey(["merchandise", "merch", "convenience", "in-store", "in store", "store sales"]);
@@ -1844,7 +1847,7 @@ const VF = {
     ]},
     { id: "fuel", title: "Fuel & Forecourt", n: "02", fields: [
       { name: "fuelBrand", label: "Fuel Brand", type: "select", tier: "quick", required: true, half: true, options: ["Unbranded","Shell","BP","Exxon","Mobil","Chevron","Marathon","Citgo","Valero","Sunoco","Phillips 66","Other"] },
-      { name: "fuelPositions", label: "Fuel Dispensers", type: "number", placeholder: "8", tier: "quick", required: true, half: true, hint: "1 dispenser = 2 fueling positions", hintLarge: true },
+      { name: "fuelPositions", label: "Fueling Positions", type: "number", placeholder: "8", tier: "quick", required: true, half: true, hint: "Count all hoses (both sides). 3 dispensers = 6 positions.", hintLarge: true },
       { name: "hasDiesel", label: "Diesel Available", type: "toggle", tier: "quick" },
       { name: "dieselPositions", label: "Auto Diesel Hoses", type: "number", placeholder: "2", tier: "quick", half: true, showIf: "hasDiesel", hint: "Standard diesel nozzles on automobile dispensers" },
       { name: "hasHighFlowDiesel", label: "Hi-Flow Truck Diesel Lanes", type: "toggle", tier: "standard" },
@@ -1919,7 +1922,7 @@ const VF = {
     ]},
     { id: "fuel", title: "Fuel & Diesel", n: "02", fields: [
       { name: "fuelBrand", label: "Fuel Brand", type: "select", tier: "quick", required: true, half: true, options: ["Unbranded","Shell","BP","Exxon","Mobil","Chevron","Marathon","Citgo","Valero","Phillips 66","Other"] },
-      { name: "fuelPositions", label: "Fuel Dispensers", type: "number", placeholder: "12", tier: "quick", required: true, half: true, hint: "1 dispenser = 2 fueling positions", hintLarge: true },
+      { name: "fuelPositions", label: "Fueling Positions", type: "number", placeholder: "12", tier: "quick", required: true, half: true, hint: "Count all hoses (both sides). 6 dispensers = 12 positions.", hintLarge: true },
       { name: "autoDieselHoses", label: "Auto Diesel Hoses", type: "number", placeholder: "4", tier: "quick", half: true, hint: "Standard diesel nozzles on automobile dispensers" },
       { name: "truckDieselLanes", label: "Truck Diesel Lanes (Hi-Flow)", type: "number", placeholder: "8", tier: "quick", required: true, half: true },
       { name: "hasDEF", label: "DEF at Diesel Lanes", type: "toggle", tier: "quick" },
@@ -2234,7 +2237,7 @@ const VF = {
     { id: "fuel", title: "Fuel Forecourt (if applicable)", n: "08", fields: [
       { name: "hasFuel", label: "Site has fuel forecourt?", type: "toggle", tier: "quick", hint: "Gasoline dispensers on site — fuel revenue is ADDITIVE to grocery" },
       { name: "fuelBrand", label: "Fuel Brand", type: "select", tier: "quick", half: true, showIf: "hasFuel", options: ["Unbranded","Shell","BP","Exxon","Mobil","Chevron","Marathon","Citgo","Valero","Sunoco","Phillips 66","Other"] },
-      { name: "fuelPositions", label: "Fuel Dispensers", type: "number", placeholder: "e.g. 4", tier: "quick", half: true, showIf: "hasFuel", hint: "1 dispenser = 2 fueling positions", hintLarge: true },
+      { name: "fuelPositions", label: "Fueling Positions", type: "number", placeholder: "e.g. 8", tier: "quick", half: true, showIf: "hasFuel", hint: "Count all hoses (both sides). 4 dispensers = 8 positions.", hintLarge: true },
     ]},
     { id: "comp", title: "Competition", n: "09", fields: [
       { name: "_compNote", label: "", type: "helper", tier: "quick", helperText: "Competitors will be researched automatically — these fields help improve accuracy but are not required" },
