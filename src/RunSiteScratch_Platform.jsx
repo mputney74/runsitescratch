@@ -11,7 +11,7 @@ import { useState, useRef, useEffect } from "react";
 const TIERS = [
   { id: "quick", label: "Quick Scan", time: "~3 min", price: "$35–50", desc: "Minimum viable inputs for a rough baseline. Best for initial screening of many sites." },
   { id: "standard", label: "Standard", time: "~8 min", price: "$50–75", desc: "Balanced detail for a more defensible forecast. Add on offerings with multiple available forecasts. Best for site selection shortlist and enhanced scrutiny." },
-  { id: "pro", label: "Pro Detail", time: "~15 min", price: "$75–125", desc: "Maximum precision estimates with enhanced detail. Best for elevated report criteria needed for investment considerations." },
+  { id: "pro", label: "Pro Detail", time: "~15 min", price: "$75–125", desc: "Multiple sections with Key Assumptions & Risk, Upside/Downside scenarios, and P&L summary." },
   { id: "decision", label: "Decision Package", time: "~20 min", price: "$149–199", desc: "Three full scenarios with side-by-side comparison and analyst recommendation. Best for final go/no-go decisions.", badge: "MOST COMPREHENSIVE" },
 ];
 
@@ -3192,7 +3192,7 @@ export default function App() {
           <h2 style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)", fontWeight: 800, textAlign: "center", marginBottom: "1.5rem", letterSpacing: "-0.03em", color: T.text }}>Simple Pricing</h2>
           <p style={{ textAlign: "center", color: T.textDim, fontSize: "1.1rem", fontWeight: 300, marginBottom: "4rem", maxWidth: 600, margin: "0 auto 4rem" }}>Pay per forecast. No subscriptions. Volume discounts available.</p>
           <div style={{ maxWidth: 960, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
-            {[{ t: "Quick Scan", p: "$35–50", d: "~3 min · Rough baseline" }, { t: "Standard", p: "$50–75", d: "~8 min · Credible forecast" }, { t: "Pro Detail", p: "$75–125", d: "~15 min · Investment-grade" }, { t: "Decision Package", p: "$149–199", d: "~20 min · 3 scenarios + comparison" }].map(p => (
+            {[{ t: "Quick Scan", p: "$35–50", d: "~3 min · Rough baseline" }, { t: "Standard", p: "$50–75", d: "~8 min · Credible forecast" }, { t: "Pro Detail", p: "$75–125", d: "~15 min · Key Assumptions & Risk, Upside/Downside" }, { t: "Decision Package", p: "$149–199", d: "~20 min · 3 scenarios + comparison" }].map(p => (
               <div key={p.t} style={{ padding: "2rem", border: p.t === "Decision Package" ? `1px solid ${T.accent}` : p.t === "Standard" ? `1px solid ${T.accentLight}` : `1px solid ${T.border}`, background: T.surface, textAlign: "center", position: "relative" }}>
                 {p.t === "Standard" && <div style={{ fontSize: 10, fontWeight: 700, color: T.accent, letterSpacing: "0.1em", marginBottom: 8 }}>MOST POPULAR</div>}
                 {p.t === "Decision Package" && <div style={{ fontSize: 10, fontWeight: 700, color: T.accent, letterSpacing: "0.1em", marginBottom: 8 }}>MOST COMPREHENSIVE</div>}
