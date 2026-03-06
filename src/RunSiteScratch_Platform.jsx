@@ -979,6 +979,18 @@ NARRATIVE RULES:
 - Do NOT generate a disclaimer section — the frontend renders a standard disclaimer automatically.
 - NEVER include any "Market Research Limitation", "Data Limitation", "Research Limitation", or similar disclaimer section. NEVER mention research timeouts, data unavailability, or gaps in market research. Present all projections confidently using available data and benchmarks.
 
+TABLE FORMAT RULES (CRITICAL):
+- For ANY table showing Low / Mid / High projections, you MUST use "scenarioTable" — NEVER "summaryTable", NEVER "genericTable".
+- scenarioTable rows MUST have separate "low", "mid", "high" fields — NEVER combine values with pipes ("|") or slashes.
+- CORRECT: { "type": "scenarioTable", "headers": ["Revenue Center", "Low Scenario", "Midpoint", "High Scenario"], "rows": [{ "label": "Grocery Sales", "low": "$72,000", "mid": "$96,000", "high": "$120,000" }] }
+- WRONG: { "type": "summaryTable", "rows": [{ "label": "Grocery Sales", "metric": "$72,000", "value": "$96,000 | $120,000" }] }
+- Use "summaryTable" ONLY for non-scenario data (e.g., Executive Summary key metrics with a single value column).
+- For Executive Summary tables, use EITHER a summaryTable with 3 columns (Revenue Center, Key Metric, Projected Range) where the range is a single string like "$72,000 – $120,000", OR a scenarioTable with separate Low/Mid/High columns. Pick one — do NOT mix formats.
+
+PROJECTION NUMBERS (CRITICAL):
+- The PROJECTION ANALYSIS section contains the FINAL clamped numbers. Use these EXACT values in all tables. Do NOT recalculate, round differently, or substitute your own numbers.
+- If the projection analysis says low=64000, mid=84000, high=104000, your scenarioTable must show "$64,000", "$84,000", "$104,000" — not rounded or adjusted versions.
+
 Output ONLY the config JSON. No explanation, no markdown fencing.`;
 
 // ─── HARD CLAMP — CODE-LEVEL ENFORCEMENT ─────────────────────
@@ -1583,6 +1595,87 @@ function extractAADTFromResearch(researchText) {
   return { aadt, truckPct, hwyAadt, hwyTruckPct };
 }
 
+// ── Post-S3 repair: fix table formats + enforce clamped numbers ──
+function repairReportConfig(config, analysis) {
+  if (!config?.sections) return config;
+  const p = analysis?.projections || {};
+  const clampedLookup = {};
+  for (const [key, val] of Object.entries(p)) {
+    if (!val || typeof val.low !== "number") continue;
+    const lk = key.toLowerCase();
+    clampedLookup[lk] = val;
+    const words = lk.replace(/[^a-z ]/g, "").split(/\s+/).filter(w => w.length > 2);
+    words.forEach(w => { if (!clampedLookup[w]) clampedLookup[w] = val; });
+  }
+  function parseDollarNum(s) {
+    if (typeof s !== "string") return null;
+    const m = s.replace(/[^0-9.]/g, "");
+    return m ? parseFloat(m) : null;
+  }
+  function fmtNum(n, unit) {
+    if (unit === "gal/mo") return n.toLocaleString("en-US");
+    return "$" + n.toLocaleString("en-US");
+  }
+  function findClamped(label) {
+    if (!label) return null;
+    const ll = label.toLowerCase();
+    if (clampedLookup[ll]) return clampedLookup[ll];
+    for (const [key, val] of Object.entries(clampedLookup)) {
+      if (key.length > 3 && (ll.includes(key) || key.includes(ll.split("(")[0].trim().toLowerCase()))) return val;
+    }
+    const words = ll.replace(/[^a-z ]/g, "").split(/\s+/).filter(w => w.length > 3);
+    for (const w of words) { if (clampedLookup[w]) return clampedLookup[w]; }
+    return null;
+  }
+  for (const section of config.sections) {
+    if (!section.content) continue;
+    for (let i = 0; i < section.content.length; i++) {
+      const item = section.content[i];
+      // Fix 1: summaryTable with pipe-separated values → scenarioTable
+      if (item.type === "summaryTable" && item.rows) {
+        const hasPipes = item.rows.some(r => (r.metric && String(r.metric).includes("|")) || (r.value && String(r.value).includes("|")));
+        const has4Headers = item.headers && item.headers.length >= 4;
+        if (hasPipes || has4Headers) {
+          const newRows = item.rows.map(r => {
+            let low, mid, high;
+            if (r.value && String(r.value).includes("|")) {
+              const parts = String(r.value).split("|").map(s => s.trim());
+              if (r.metric && !String(r.metric).includes("|")) { low = r.metric; mid = parts[0]; high = parts[1] || parts[0]; }
+              else { low = parts[0]; mid = parts[1] || parts[0]; high = parts[2] || parts[1] || parts[0]; }
+            } else if (r.metric && String(r.metric).includes("|")) {
+              const parts = String(r.metric).split("|").map(s => s.trim());
+              low = parts[0]; mid = parts[1] || parts[0]; high = r.value || parts[1] || parts[0];
+            } else { low = r.metric || ""; mid = r.value || ""; high = r.value || ""; }
+            return { label: r.label, low, mid, high, isTotal: r.isTotal || false, isSubset: r.isSubset || false };
+          });
+          section.content[i] = { type: "scenarioTable", headers: (item.headers && item.headers.length >= 4) ? item.headers : ["Revenue Center", "Low Scenario", "Midpoint", "High Scenario"], rows: newRows };
+        }
+      }
+      // Fix 2: Enforce clamped numbers in scenarioTables
+      const currentItem = section.content[i]; // re-read after possible Fix 1 conversion
+      if (currentItem.type === "scenarioTable" && currentItem.rows) {
+        for (const row of currentItem.rows) {
+          const clamped = findClamped(row.label);
+          if (!clamped) continue;
+          const isGal = clamped.unit === "gal/mo" || (row.label && row.label.toLowerCase().includes("gal"));
+          const unit = isGal ? "gal/mo" : "$/mo";
+          const reportHigh = parseDollarNum(row.high);
+          const reportLow = parseDollarNum(row.low);
+          const reportMid = parseDollarNum(row.mid);
+          let changed = false;
+          if (reportHigh !== null && reportHigh > clamped.high * 1.01) { row.high = fmtNum(clamped.high, unit); changed = true; }
+          if (reportLow !== null && reportLow < clamped.low * 0.99) { row.low = fmtNum(clamped.low, unit); changed = true; }
+          if (changed && reportMid !== null) {
+            if (reportMid > clamped.high) row.mid = fmtNum(clamped.mid, unit);
+            else if (reportMid < clamped.low) row.mid = fmtNum(clamped.mid, unit);
+          }
+        }
+      }
+    }
+  }
+  return config;
+}
+
 async function runPipeline(formData, vertical, tier, onProgress) {
   const intake = formatIntake(formData, vertical, tier);
   const vb = VERT_BENCHMARKS[vertical] || VERT_BENCHMARKS.cstore;
@@ -1663,6 +1756,8 @@ async function runPipeline(formData, vertical, tier, onProgress) {
   let config;
   try { config = extractJSON(configRaw); }
   catch (e) { throw new Error(`Report config parse error: ${e.message} (response length: ${configRaw.length} chars)`); }
+  // Post-S3 repair: fix table formats + enforce clamped projection numbers
+  config = repairReportConfig(config, analysis);
   onProgress({ stage: 3, status: "done", msg: "Report assembled" });
 
   return { config, research, analysis, autoPull: {
