@@ -991,6 +991,15 @@ PROJECTION NUMBERS (CRITICAL):
 - The PROJECTION ANALYSIS section contains the FINAL clamped numbers. Use these EXACT values in all tables. Do NOT recalculate, round differently, or substitute your own numbers.
 - If the projection analysis says low=64000, mid=84000, high=104000, your scenarioTable must show "$64,000", "$84,000", "$104,000" — not rounded or adjusted versions.
 
+UNITS — MONTHLY DESIGNATION (CRITICAL):
+- ALL revenue projections represent MONTHLY averages at stabilized operations. This MUST be clear to the reader.
+- Every scenarioTable showing revenue projections MUST include "(Monthly)" or "($/mo)" in either the row label or the column headers.
+- CORRECT row labels: "Grocery / Market Sales ($/mo)", "Prepared Food / Hot Bar ($/mo)", "Motor Fuel — Gasoline (gal/mo)"
+- CORRECT headers: ["Revenue Center", "Low (Monthly)", "Midpoint (Monthly)", "High (Monthly)"]
+- Pick ONE approach and be consistent. Preferred: include units in the row label, e.g. "Grocery / Market Sales ($/mo)".
+- For Executive Summary tables, include a footnote: "All revenue figures represent projected average monthly sales at stabilized operations (Year 2+)."
+- NEVER present dollar projections without a timeframe indicator. A reader must be able to tell at a glance whether $72,000 means per month, per year, or per day.
+
 Output ONLY the config JSON. No explanation, no markdown fencing.`;
 
 // ─── HARD CLAMP — CODE-LEVEL ENFORCEMENT ─────────────────────
@@ -1671,6 +1680,28 @@ function repairReportConfig(config, analysis) {
           }
         }
       }
+    }
+  }
+  // Fix 3: Ensure monthly units on all projection labels
+  const DOLLAR_LABELS = ["grocery", "market", "sales", "prepared", "hot bar", "food", "merchandise", "liquor", "revenue", "total", "wash", "membership", "services", "catering"];
+  const GAL_LABELS = ["gasoline", "diesel", "fuel", "gal"];
+  for (const section of config.sections) {
+    if (!section.content) continue;
+    for (const cItem of section.content) {
+      if (cItem.type === "scenarioTable" && cItem.rows) {
+        for (const row of cItem.rows) {
+          if (!row.label) continue;
+          const ll = row.label.toLowerCase();
+          if (ll.includes("/mo") || ll.includes("monthly") || ll.includes("per month") || ll.includes("margin") || ll.includes("annual")) continue;
+          if (DOLLAR_LABELS.some(k => ll.includes(k)) && !GAL_LABELS.some(k => ll.includes(k))) row.label = row.label + " ($/mo)";
+          else if (GAL_LABELS.some(k => ll.includes(k))) row.label = row.label + " (gal/mo)";
+        }
+      }
+    }
+    const hasScenario = section.content.some(it => it.type === "scenarioTable");
+    const hasMonthlyNote = section.content.some(it => it.type === "footnote" && it.text && (it.text.toLowerCase().includes("monthly") || it.text.toLowerCase().includes("per month")));
+    if (hasScenario && !hasMonthlyNote) {
+      section.content.push({ type: "footnote", text: "All revenue figures represent projected average monthly sales at stabilized operations (Year 2+)." });
     }
   }
   return config;
