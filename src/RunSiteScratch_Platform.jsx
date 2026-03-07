@@ -1061,6 +1061,14 @@ PROJECTION NUMBERS (CRITICAL):
 - The PROJECTION ANALYSIS section contains the FINAL clamped numbers. Use these EXACT values in all tables. Do NOT recalculate, round differently, or substitute your own numbers.
 - If the projection analysis says low=64000, mid=84000, high=104000, your scenarioTable must show "$64,000", "$84,000", "$104,000" — not rounded or adjusted versions.
 
+SCENARIO TABLE SIMPLICITY (CRITICAL):
+- Projection scenarioTables MUST have EXACTLY 4 columns: Revenue Center (or Scenario), Low, Midpoint, High.
+- Do NOT add derived metric columns such as: Daily Average, Per-Position, Per-Lane Average, Daily Total, Annual Revenue, $/SF/Month, or any other calculated breakdowns.
+- The reader wants clean monthly projection ranges — nothing else in the projection table.
+- If you want to mention per-lane throughput, $/SF, or daily averages, put them in the narrative paragraph BELOW the table — NEVER as table columns.
+- CORRECT headers: ["Revenue Center", "Low Scenario", "Midpoint", "High Scenario"] — 4 columns only.
+- WRONG headers: ["Scenario", "Monthly Volume", "Per-Lane Average", "Daily Total"] — too many derived columns.
+
 UNITS — MONTHLY DESIGNATION (CRITICAL):
 - ALL revenue projections represent MONTHLY averages at stabilized operations. This MUST be clear to the reader.
 - Every scenarioTable showing revenue projections MUST include "(Monthly)" or "($/mo)" in either the row label or the column headers.
