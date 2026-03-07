@@ -485,12 +485,16 @@ function formatIntake(fd, vertical, tier) {
     const chainBrands = ["Pilot/Flying J", "Love's", "TA/Petro"];
     const midChains = ["Ambest"];
     const showers = parseInt(fd.showerCount) || 0;
+    const spots = parseInt(fd.truckParking) || 0;
     const hasScales = fd.hasScales;
     const hasLaundry = fd.hasLaundry;
 
-    if (chainBrands.includes(brand)) {
+    // If no truck amenities at all, suppress the line entirely (S18)
+    const hasTruckAmenities = showers > 0 || spots > 0 || hasScales || hasLaundry;
+    if (!hasTruckAmenities) {
+      lines.push(`TRUCK SERVICES NOTE: Site has NO showers, NO truck parking, NO scales, NO laundry. Do NOT include a Truck Services revenue line in the projection. This site does not generate truck services revenue.`);
+    } else if (chainBrands.includes(brand)) {
       // Chain: paid parking + high shower/scale volume
-      const spots = parseInt(fd.truckParking) || 0;
       const parkingLow = Math.round(spots * 0.45 * 18 * 30);
       const parkingHigh = Math.round(spots * 0.65 * 22 * 30);
       const showerLow = showers > 0 ? Math.round(showers * 4 * 12 * 30) : 0;
@@ -1096,30 +1100,40 @@ function clampProjections(analysis, fd, vertical) {
     const chainBrands = ["Pilot/Flying J", "Love's", "TA/Petro"];
     const midChains = ["Ambest"];
     const showers = parseInt(fd.showerCount) || 0;
+    const spots = parseInt(fd.truckParking) || 0;
     const hasScales = fd.hasScales;
     const hasLaundry = fd.hasLaundry;
+    const hasTruckAmenities = showers > 0 || spots > 0 || hasScales || hasLaundry;
 
-    let tsCeil;
-    if (chainBrands.includes(brand)) {
-      const spots = parseInt(fd.truckParking) || 0;
-      const parkingHigh = Math.round(spots * 0.65 * 22 * 30);
-      const showerHigh = showers > 0 ? Math.round(showers * 6 * 15 * 30) : 0;
-      const scaleHigh = hasScales ? 900 * 14 : 0;
-      tsCeil = parkingHigh + showerHigh + scaleHigh + (hasLaundry ? 3000 : 0);
-    } else if (midChains.includes(brand)) {
-      const showerHigh = showers > 0 ? Math.round(showers * 5 * 14 * 30) : 0;
-      const scaleHigh = hasScales ? 750 * 13 : 0;
-      tsCeil = showerHigh + scaleHigh + (hasLaundry ? 2500 : 0);
+    if (!hasTruckAmenities) {
+      // No amenities — delete truck services key entirely (S18)
+      const tsKey = Object.keys(p).find(k => {
+        const lk = k.toLowerCase();
+        return (lk.includes("truck") && lk.includes("service")) || lk.includes("parking") || (lk.includes("shower") && !lk.includes("food"));
+      });
+      if (tsKey) delete p[tsKey];
     } else {
-      // Independent: NO parking revenue
-      const showerHigh = showers > 0 ? Math.round(showers * 3 * 14 * 30) : 0;
-      const scaleHigh = hasScales ? 700 * 13 : 0;
-      tsCeil = showerHigh + scaleHigh + (hasLaundry ? 2500 : 0);
+      let tsCeil;
+      if (chainBrands.includes(brand)) {
+        const parkingHigh = Math.round(spots * 0.65 * 22 * 30);
+        const showerHigh = showers > 0 ? Math.round(showers * 6 * 15 * 30) : 0;
+        const scaleHigh = hasScales ? 900 * 14 : 0;
+        tsCeil = parkingHigh + showerHigh + scaleHigh + (hasLaundry ? 3000 : 0);
+      } else if (midChains.includes(brand)) {
+        const showerHigh = showers > 0 ? Math.round(showers * 5 * 14 * 30) : 0;
+        const scaleHigh = hasScales ? 750 * 13 : 0;
+        tsCeil = showerHigh + scaleHigh + (hasLaundry ? 2500 : 0);
+      } else {
+        // Independent: NO parking revenue
+        const showerHigh = showers > 0 ? Math.round(showers * 3 * 14 * 30) : 0;
+        const scaleHigh = hasScales ? 700 * 13 : 0;
+        tsCeil = showerHigh + scaleHigh + (hasLaundry ? 2500 : 0);
+      }
+      clamp("truck", null, tsCeil);
+      clamp("service", null, tsCeil);
+      clamp("parking", null, tsCeil);
+      clamp("shower", null, tsCeil);
     }
-    clamp("truck", null, tsCeil);
-    clamp("service", null, tsCeil);
-    clamp("parking", null, tsCeil);
-    clamp("shower", null, tsCeil);
   }
 
   // C-store / Travel: position-based fuel volume FLOOR + CEILING
