@@ -281,6 +281,22 @@ function coordsFromFd(fd) {
   };
 }
 
+// ── Travel center merchandise ceiling helper (S17) ──
+const TC_CHAIN_BRANDS = ["Pilot/Flying J", "Love's", "TA/Petro"];
+const TC_MID_BRANDS = ["Ambest"];
+const TC_DIMINISH_SF = 8000;
+const TC_DIMINISH_RATE = 0.65;
+
+function travelMerchBase(sqft, brand) {
+  let perSf;
+  if (TC_CHAIN_BRANDS.includes(brand)) perSf = 32;
+  else if (TC_MID_BRANDS.includes(brand)) perSf = 26;
+  else perSf = 22;
+  const baseSf = Math.min(sqft, TC_DIMINISH_SF);
+  const extraSf = Math.max(0, sqft - TC_DIMINISH_SF);
+  return Math.round((baseSf * perSf) + (extraSf * perSf * TC_DIMINISH_RATE));
+}
+
 // ── Field normalization — bridge form field names to pipeline names ──
 function normalizeFormData(fd, vertical) {
   const n = { ...fd };
@@ -546,13 +562,26 @@ function formatIntake(fd, vertical, tier) {
       fsLabel = "none";
     }
 
-    // Merchandise ranges: total in-store ($150K scaled) minus foodservice
+    // Merchandise ranges — chain travel centers use per-SF rate, everything else uses base formula
+    // CRITICAL: merchCeiling MUST match clampProjections() formula (S16/S17 alignment rule)
+    const fsFoorAlloc = fd.hasFullKitchen ? (fd.hasBrandedFastFood ? 37000 : 20000) :
+                        fd.hasHotExpress ? 7000 : fd.hasRollerGrill ? 3000 : 0;
+    const fsDeductMin = Math.round(fsFoorAlloc * incomeScalar);
     const totalInStoreBase = 150000;
     const adjustedTotal = Math.round(totalInStoreBase * sqftScalar * incomeScalar);
-    const merchLow = Math.round(adjustedTotal * 0.85) - fsCeilHigh; // conservative: lower merch + higher food
-    const merchHigh = Math.round(adjustedTotal * 1.05) - fsCeilLow; // optimistic: higher merch + lower food
-    const merchFloor = Math.max(merchLow, Math.round(40000 * sqftScalar)); // absolute floor
-    const merchCeiling = merchHigh;
+    let merchFloor, merchCeiling;
+    if (vertical === "travel" && TC_CHAIN_BRANDS.includes(fd.tcBrand)) {
+      // Chain travel centers: per-SF rate with diminishing returns (S17)
+      const rawMerch = travelMerchBase(storeSqft, fd.tcBrand);
+      merchCeiling = Math.round(rawMerch * incomeScalar) - fsDeductMin;
+      merchFloor = Math.round(rawMerch * incomeScalar * 0.75) - fsCeilHigh;
+      merchFloor = Math.max(merchFloor, Math.round(50000 * incomeScalar));
+    } else {
+      // C-store + independent/mid-tier travel: base formula
+      merchCeiling = adjustedTotal - fsDeductMin;
+      const merchLow = Math.round(adjustedTotal * 0.85) - fsCeilHigh;
+      merchFloor = Math.max(merchLow, Math.round(40000 * sqftScalar));
+    }
 
     const sqftNote = storeSqft !== NACS_AVG_SF ? ` Store ${storeSqft.toLocaleString()} SF (NACS avg 2,675 SF — ${sqftScalar > 1.02 ? "above" : sqftScalar < 0.98 ? "below" : "near"} avg).` : "";
     const mhiNote = mhi > 0 && incomeScalar < 0.96 ? ` Market MHI ~$${(mhi/1000).toFixed(0)}K adjusts basket size (${Math.round(incomeScalar*100)}% of national avg).` : "";
@@ -1100,6 +1129,37 @@ function clampProjections(analysis, fd, vertical) {
     }
   }
 
+  // ── Travel center: hi-flow diesel lane-based FLOOR + CEILING ──
+  if (vertical === "travel" && fd.truckDieselLanes) {
+    const lanes = parseInt(fd.truckDieselLanes) || 1;
+    const brand = fd.tcBrand || "Independent";
+    const chainBrands = ["Pilot/Flying J", "Love's", "TA/Petro"];
+    const midChains = ["Ambest"];
+    let perLaneFloor, perLaneCeil;
+    if (chainBrands.includes(brand)) { perLaneFloor = 65000; perLaneCeil = 100000; }
+    else if (midChains.includes(brand)) { perLaneFloor = 35000; perLaneCeil = 60000; }
+    else { perLaneFloor = 25000; perLaneCeil = 50000; }
+    const dieselFloor = perLaneFloor * lanes;
+    const dieselCeil = perLaneCeil * lanes;
+    const dieselKey = Object.keys(p).find(k => k.toLowerCase().includes("diesel"));
+    if (dieselKey && p[dieselKey]) {
+      if (p[dieselKey].high > dieselCeil) {
+        p[dieselKey].high = dieselCeil;
+        p[dieselKey].mid = Math.round(Math.min(p[dieselKey].mid, dieselCeil * 0.85));
+        p[dieselKey].low = Math.round(Math.min(p[dieselKey].low, p[dieselKey].mid * 0.75));
+      }
+      if (p[dieselKey].low < dieselFloor) {
+        p[dieselKey].low = dieselFloor;
+        p[dieselKey].mid = Math.max(p[dieselKey].mid, Math.round(dieselFloor * 1.15));
+        p[dieselKey].high = Math.max(p[dieselKey].high, Math.round(dieselFloor * 1.35));
+        if (p[dieselKey].high > dieselCeil) p[dieselKey].high = dieselCeil;
+        if (p[dieselKey].mid > p[dieselKey].high) p[dieselKey].mid = Math.round(p[dieselKey].high * 0.88);
+      }
+      if (p[dieselKey].low >= p[dieselKey].mid) p[dieselKey].low = Math.round(p[dieselKey].mid * 0.75);
+      if (p[dieselKey].mid >= p[dieselKey].high) p[dieselKey].high = Math.round(p[dieselKey].mid * 1.2);
+    }
+  }
+
   // ── C-store/travel foodservice cap (absolute — additive model) — income-adjusted ──
   if (vertical === "cstore" || vertical === "travel") {
     const mhi = parseInt(fd.medianHouseholdIncome) || parseInt(fd.mhi) || 0;
@@ -1132,15 +1192,21 @@ function clampProjections(analysis, fd, vertical) {
         if (p[fsKey].mid >= p[fsKey].high) p[fsKey].high = Math.round(p[fsKey].mid * 1.2);
       }
     }
-    // Merchandise ceiling — sqft + income scaled (uses $150K typical new store base)
+    // Merchandise ceiling — chain TCs use per-SF rate, everything else uses base formula (S17)
     const storeSqft = parseInt(fd.storeSqft) || parseInt(fd.buildingSqft) || 2675;
     const NACS_AVG_SF = 2675;
     const sqftScalar = Math.max(0.6, Math.min(1.4, storeSqft / NACS_AVG_SF));
-    const totalInStoreBase = 150000;
-    const adjustedTotal = Math.round(totalInStoreBase * sqftScalar * incomeScalar);
     const fsFoorAlloc = fd.hasFullKitchen ? (fd.hasBrandedFastFood ? 37000 : 20000) :
                         fd.hasHotExpress ? 7000 : fd.hasRollerGrill ? 3000 : 0;
-    const merchCeil = adjustedTotal - Math.round(fsFoorAlloc * incomeScalar);
+    let merchCeil;
+    if (vertical === "travel" && TC_CHAIN_BRANDS.includes(fd.tcBrand)) {
+      const rawMerch = travelMerchBase(storeSqft, fd.tcBrand);
+      merchCeil = Math.round(rawMerch * incomeScalar) - Math.round(fsFoorAlloc * incomeScalar);
+    } else {
+      const totalInStoreBase = 150000;
+      const adjustedTotal = Math.round(totalInStoreBase * sqftScalar * incomeScalar);
+      merchCeil = adjustedTotal - Math.round(fsFoorAlloc * incomeScalar);
+    }
     const merchKey = Object.keys(p).find(k => {
       const lk = k.toLowerCase();
       return lk.includes("merchandise") || lk.includes("merch") || (lk.includes("in-store") && !lk.includes("food")) || (lk.includes("convenience") && !lk.includes("food"));
