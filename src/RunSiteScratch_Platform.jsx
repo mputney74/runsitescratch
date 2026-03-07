@@ -1218,17 +1218,56 @@ function clampProjections(analysis, fd, vertical) {
     else if (fd.hasHotExpress) fsCeil = 14000;
     else if (fd.hasRollerGrill) fsCeil = 7000;
     else fsCeil = 1500;
+
+    // Foodservice FLOOR — if site has a kitchen, S2 cannot project $0 (S18 fix)
+    let fsFloor = 0;
+    if (fd.hasFullKitchen && fd.hasBrandedFastFood && vertical !== "travel") {
+      fsFloor = Math.round(30000 * incomeScalar); // branded kitchen floor
+    } else if (fd.hasFullKitchen) {
+      fsFloor = Math.round(15000 * incomeScalar); // unbranded kitchen floor
+    } else if (fd.hasHotExpress) {
+      fsFloor = 5000;
+    } else if (fd.hasRollerGrill) {
+      fsFloor = 2000;
+    }
+
     const fsKey = Object.keys(p).find(k => {
       const lk = k.toLowerCase();
       return lk.includes("foodservice") || lk.includes("food service") || lk.includes("prepared");
     });
+
+    // If S2 omitted foodservice entirely but site has kitchen, inject it at floor values
+    if (!fsKey && fsFloor > 0) {
+      const injectedKey = "Foodservice ($/mo)";
+      p[injectedKey] = {
+        low: fsFloor,
+        mid: Math.round(fsFloor * 1.4),
+        high: Math.round(fsFloor * 1.8),
+        unit: "$/mo",
+        _injected: true,
+      };
+      if (p[injectedKey].high > fsCeil) p[injectedKey].high = fsCeil;
+      if (p[injectedKey].mid > p[injectedKey].high) p[injectedKey].mid = Math.round(p[injectedKey].high * 0.80);
+    }
+
     if (fsKey && p[fsKey]) {
+      // CEILING enforcement
       if (p[fsKey].high > fsCeil) {
         p[fsKey].high = fsCeil;
         p[fsKey].mid = Math.min(p[fsKey].mid, Math.round(fsCeil * 0.80));
         p[fsKey].low = Math.min(p[fsKey].low, Math.round(p[fsKey].mid * 0.75));
         if (p[fsKey].low >= p[fsKey].mid) p[fsKey].low = Math.round(p[fsKey].mid * 0.75);
         if (p[fsKey].mid >= p[fsKey].high) p[fsKey].high = Math.round(p[fsKey].mid * 1.2);
+      }
+      // FLOOR enforcement — S2 cannot project below floor if kitchen exists (S18)
+      if (fsFloor > 0 && p[fsKey].high < fsFloor) {
+        p[fsKey].low = fsFloor;
+        p[fsKey].mid = Math.round(fsFloor * 1.4);
+        p[fsKey].high = Math.min(Math.round(fsFloor * 1.8), fsCeil);
+        if (p[fsKey].mid >= p[fsKey].high) p[fsKey].mid = Math.round((p[fsKey].low + p[fsKey].high) / 2);
+      } else if (fsFloor > 0 && p[fsKey].low < fsFloor) {
+        p[fsKey].low = fsFloor;
+        if (p[fsKey].low >= p[fsKey].mid) p[fsKey].mid = Math.round((p[fsKey].low + p[fsKey].high) / 2);
       }
     }
     // Attached QSR ceiling (travel centers with separate QSR brand — S18)
