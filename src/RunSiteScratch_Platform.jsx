@@ -564,7 +564,7 @@ function formatIntake(fd, vertical, tier) {
 
     // Merchandise ranges — chain travel centers use per-SF rate, everything else uses base formula
     // CRITICAL: merchCeiling MUST match clampProjections() formula (S16/S17 alignment rule)
-    const fsFoorAlloc = fd.hasFullKitchen ? (fd.hasBrandedFastFood ? 37000 : 20000) :
+    const fsFoorAlloc = fd.hasFullKitchen ? ((fd.hasBrandedFastFood && vertical !== "travel") ? 37000 : 20000) :
                         fd.hasHotExpress ? 7000 : fd.hasRollerGrill ? 3000 : 0;
     const fsDeductMin = Math.round(fsFoorAlloc * incomeScalar);
     const totalInStoreBase = 150000;
@@ -586,7 +586,43 @@ function formatIntake(fd, vertical, tier) {
     const sqftNote = storeSqft !== NACS_AVG_SF ? ` Store ${storeSqft.toLocaleString()} SF (NACS avg 2,675 SF — ${sqftScalar > 1.02 ? "above" : sqftScalar < 0.98 ? "below" : "near"} avg).` : "";
     const mhiNote = mhi > 0 && incomeScalar < 0.96 ? ` Market MHI ~$${(mhi/1000).toFixed(0)}K adjusts basket size (${Math.round(incomeScalar*100)}% of national avg).` : "";
 
-    if (fsLabel === "branded") {
+    if (fsLabel === "branded" && vertical === "travel") {
+      const unbrandedFsLow = Math.round(20000 * incomeScalar);
+      const unbrandedFsHigh = Math.round(32000 * Math.max(incomeScalar, 0.85));
+      lines.push(`FOODSERVICE NOTE: Site has an IN-HOUSE kitchen/deli (unbranded — e.g. PJ Fresh Kitchen, proprietary deli). This is SEPARATE from the attached QSR brand. FOODSERVICE is a SEPARATE additive line item — NOT a subset of merchandise. Projected in-house foodservice revenue: $${unbrandedFsLow.toLocaleString()}-${unbrandedFsHigh.toLocaleString()}/mo. Avg unbranded kitchen ticket: $8-12 per visit.${mhiNote} MERCHANDISE (tobacco, beverages, snacks, beer/wine, general merch) is projected SEPARATELY at $${merchFloor.toLocaleString()}-${merchCeiling.toLocaleString()}/mo.${sqftNote}`);
+      const qsrBrand = fd.brandedFastFoodName;
+      const brandAUV = {
+        "McDonald's": [2800000, 3800000], "Chick-fil-A": [6500000, 8500000],
+        "Raising Cane's": [4000000, 5500000], "Whataburger": [2800000, 3500000],
+        "Taco Bell": [1600000, 2200000], "Wendy's": [1800000, 2400000],
+        "Popeyes": [1400000, 2000000], "Subway": [400000, 550000],
+        "Arby's": [1100000, 1500000], "Dunkin'": [900000, 1300000],
+        "Panera Bread": [2500000, 3200000], "Chipotle": [2800000, 3500000],
+        "Five Guys": [1200000, 1800000], "Wingstop": [1600000, 2200000],
+        "Domino's": [1100000, 1400000], "Pizza Hut": [800000, 1100000],
+        "KFC": [1100000, 1500000], "Sonic Drive-In": [1200000, 1600000],
+        "Starbucks": [1800000, 2400000], "Panda Express": [1800000, 2400000],
+      };
+      const brandTicket = {
+        "Arby's": [8, 11], "Subway": [8, 11], "Dunkin'": [5, 8], "McDonald's": [9, 12],
+        "Wendy's": [9, 12], "Taco Bell": [7, 10], "Popeyes": [9, 12], "Whataburger": [9, 13],
+        "Panda Express": [9, 12], "Sonic Drive-In": [7, 10],
+      };
+      const hasDT = fd.hasDriveThru;
+      const auvRange = brandAUV[qsrBrand];
+      const ticket = brandTicket[qsrBrand] || [8, 14];
+      if (auvRange) {
+        const attachedPct = hasDT ? 0.80 : 0.60;
+        const attachedPctHigh = hasDT ? 0.95 : 0.80;
+        const qsrLow = Math.round((auvRange[0] / 12) * attachedPct * incomeScalar);
+        const qsrHigh = Math.round((auvRange[1] / 12) * attachedPctHigh * incomeScalar);
+        lines.push(`ATTACHED QSR NOTE: Site has an attached ${qsrBrand} — this is a SEPARATE additive revenue line from Foodservice and Merchandise. ${qsrBrand} standalone FDD AUV: $${auvRange[0].toLocaleString()}-${auvRange[1].toLocaleString()}/yr. Attached TC locations typically run ${Math.round(attachedPct*100)}-${Math.round(attachedPctHigh*100)}% of standalone AUV${hasDT ? " (drive-thru present)" : " (no drive-thru — dine-in/carryout only)"}. PROJECTED ATTACHED QSR REVENUE: $${qsrLow.toLocaleString()}-${qsrHigh.toLocaleString()}/mo. Avg ticket: $${ticket[0]}-${ticket[1]}. Revenue = daily transactions × avg ticket × 30. Adjust transaction COUNT to hit target, not ticket size.`);
+      } else {
+        const qsrLow = Math.round(50000 * incomeScalar);
+        const qsrHigh = Math.round(120000 * incomeScalar);
+        lines.push(`ATTACHED QSR NOTE: Site has an attached ${qsrBrand} — this is a SEPARATE additive revenue line from Foodservice and Merchandise. No FDD AUV data for this brand. Estimated attached QSR range: $${qsrLow.toLocaleString()}-${qsrHigh.toLocaleString()}/mo. Avg QSR ticket: $${ticket[0]}-${ticket[1]}. Revenue = daily transactions × avg ticket × 30.`);
+      }
+    } else if (fsLabel === "branded") {
       lines.push(`FOODSERVICE NOTE: Site has a BRANDED kitchen concept (${fd.brandedFastFoodName}). FOODSERVICE is a SEPARATE additive line item — NOT a subset of merchandise. Projected foodservice revenue: $${fsCeilLow.toLocaleString()}-${fsCeilHigh.toLocaleString()}/mo. Avg branded kitchen ticket: $8-14 per visit. Year 1 ramp: 60-75% of stabilized.${mhiNote} MERCHANDISE (tobacco, beverages, snacks, beer/wine, general merch) is projected SEPARATELY at $${merchFloor.toLocaleString()}-${merchCeiling.toLocaleString()}/mo.${sqftNote}`);
     } else if (fsLabel === "unbranded") {
       lines.push(`FOODSERVICE NOTE: Site has a full kitchen but UNBRANDED / independent concept. FOODSERVICE is a SEPARATE additive line item. Projected foodservice revenue: $${fsCeilLow.toLocaleString()}-${fsCeilHigh.toLocaleString()}/mo. Do NOT project above $${fsCeilHigh.toLocaleString()}/mo for an unbranded kitchen — only proven chains exceed $${fsCeilHigh.toLocaleString()}. Avg unbranded kitchen ticket: $8-12 per visit.${mhiNote} MERCHANDISE is projected SEPARATELY at $${merchFloor.toLocaleString()}-${merchCeiling.toLocaleString()}/mo.${sqftNote}`);
@@ -597,7 +633,8 @@ function formatIntake(fd, vertical, tier) {
     } else {
       lines.push(`FOODSERVICE NOTE: Site has NO foodservice, NO kitchen, NO roller grill. Do NOT include a Foodservice line item — all in-store revenue goes to Merchandise.${mhiNote} Merchandise: $${merchFloor.toLocaleString()}-${merchCeiling.toLocaleString()}/mo.${sqftNote}`);
     }
-    lines.push(`REVENUE STRUCTURE NOTE: Gasoline, Diesel, In-Store Merchandise, and Foodservice are ALL separate additive line items. Total in-store = Merchandise + Foodservice. Do NOT make Foodservice a subset of Merchandise. Do NOT double-count.`);
+    const hasAttachedQSR = vertical === "travel" && fd.hasBrandedFastFood && fd.brandedFastFoodName;
+    lines.push(`REVENUE STRUCTURE NOTE: Gasoline, Diesel, In-Store Merchandise, and Foodservice are ALL separate additive line items. Total in-store = Merchandise + Foodservice.${hasAttachedQSR ? ` Attached QSR (${fd.brandedFastFoodName}) is ALSO a separate additive line — do NOT merge it into Foodservice.` : ""} Do NOT make Foodservice a subset of Merchandise. Do NOT double-count.`);
   }
 
   // ── Car Wash ──
@@ -1172,7 +1209,9 @@ function clampProjections(analysis, fd, vertical) {
       else if (mhi < 75000) incomeScalar = 0.95;
     }
     let fsCeil;
-    if (fd.hasFullKitchen && fd.hasBrandedFastFood) fsCeil = Math.round(51000 * incomeScalar);
+    if (fd.hasFullKitchen && fd.hasBrandedFastFood && vertical === "travel") {
+      fsCeil = incomeScalar >= 0.96 ? Math.round(36000 * incomeScalar) : Math.round(32000 * Math.max(incomeScalar, 0.85));
+    } else if (fd.hasFullKitchen && fd.hasBrandedFastFood) fsCeil = Math.round(51000 * incomeScalar);
     else if (fd.hasFullKitchen) {
       fsCeil = incomeScalar >= 0.96 ? Math.round(36000 * incomeScalar) : Math.round(32000 * Math.max(incomeScalar, 0.85));
     }
@@ -1192,11 +1231,56 @@ function clampProjections(analysis, fd, vertical) {
         if (p[fsKey].mid >= p[fsKey].high) p[fsKey].high = Math.round(p[fsKey].mid * 1.2);
       }
     }
+    // Attached QSR ceiling (travel centers with separate QSR brand — S18)
+    if (vertical === "travel" && fd.hasBrandedFastFood && fd.brandedFastFoodName) {
+      const qsrBrand = fd.brandedFastFoodName;
+      const brandAUV = {
+        "McDonald's": [2800000, 3800000], "Chick-fil-A": [6500000, 8500000],
+        "Raising Cane's": [4000000, 5500000], "Whataburger": [2800000, 3500000],
+        "Taco Bell": [1600000, 2200000], "Wendy's": [1800000, 2400000],
+        "Popeyes": [1400000, 2000000], "Subway": [400000, 550000],
+        "Arby's": [1100000, 1500000], "Dunkin'": [900000, 1300000],
+        "Panera Bread": [2500000, 3200000], "Chipotle": [2800000, 3500000],
+        "Five Guys": [1200000, 1800000], "Wingstop": [1600000, 2200000],
+        "KFC": [1100000, 1500000], "Panda Express": [1800000, 2400000],
+      };
+      const hasDT = fd.hasDriveThru;
+      const auvRange = brandAUV[qsrBrand];
+      const attachedPctHigh = hasDT ? 0.95 : 0.80;
+      const attachedPctLow = hasDT ? 0.80 : 0.60;
+      let qsrCeil, qsrFloor;
+      if (auvRange) {
+        qsrCeil = Math.round((auvRange[1] / 12) * attachedPctHigh * incomeScalar);
+        qsrFloor = Math.round((auvRange[0] / 12) * attachedPctLow * incomeScalar * 0.70);
+      } else {
+        qsrCeil = Math.round(120000 * incomeScalar);
+        qsrFloor = Math.round(35000 * incomeScalar);
+      }
+      const qsrKey = Object.keys(p).find(k => {
+        const lk = k.toLowerCase();
+        return lk.includes("qsr") || lk.includes("attached") || lk.includes(qsrBrand.toLowerCase());
+      });
+      if (qsrKey && p[qsrKey]) {
+        if (p[qsrKey].high > qsrCeil) {
+          p[qsrKey].high = qsrCeil;
+          p[qsrKey].mid = Math.min(p[qsrKey].mid, Math.round(qsrCeil * 0.80));
+          p[qsrKey].low = Math.min(p[qsrKey].low, Math.round(p[qsrKey].mid * 0.75));
+        }
+        if (p[qsrKey].low < qsrFloor) {
+          p[qsrKey].low = qsrFloor;
+          p[qsrKey].mid = Math.max(p[qsrKey].mid, Math.round(qsrFloor * 1.3));
+          p[qsrKey].high = Math.max(p[qsrKey].high, Math.round(qsrFloor * 1.8));
+          if (p[qsrKey].high > qsrCeil) p[qsrKey].high = qsrCeil;
+        }
+        if (p[qsrKey].low >= p[qsrKey].mid) p[qsrKey].low = Math.round(p[qsrKey].mid * 0.75);
+        if (p[qsrKey].mid >= p[qsrKey].high) p[qsrKey].high = Math.round(p[qsrKey].mid * 1.2);
+      }
+    }
     // Merchandise ceiling — chain TCs use per-SF rate, everything else uses base formula (S17)
     const storeSqft = parseInt(fd.storeSqft) || parseInt(fd.buildingSqft) || 2675;
     const NACS_AVG_SF = 2675;
     const sqftScalar = Math.max(0.6, Math.min(1.4, storeSqft / NACS_AVG_SF));
-    const fsFoorAlloc = fd.hasFullKitchen ? (fd.hasBrandedFastFood ? 37000 : 20000) :
+    const fsFoorAlloc = fd.hasFullKitchen ? ((fd.hasBrandedFastFood && vertical !== "travel") ? 37000 : 20000) :
                         fd.hasHotExpress ? 7000 : fd.hasRollerGrill ? 3000 : 0;
     let merchCeil;
     if (vertical === "travel" && TC_CHAIN_BRANDS.includes(fd.tcBrand)) {
