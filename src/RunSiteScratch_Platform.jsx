@@ -82,8 +82,8 @@ const SHARED_TRAFFIC = [
   { name: "nearestEmployer", label: "Major Employer Nearby", type: "text", placeholder: "e.g. Eastman Chemical — 5 mi, 14K employees", tier: "pro" },
 ];
 
-// ─── FUEL VERTICAL TRAFFIC (C-Store & Travel Center) ────────
-// Splits traffic into site/surface road vs. highway for fuel volume modeling
+// ─── FUEL VERTICAL TRAFFIC (preserved for reference — removed from intake in S19) ────────
+// Traffic input removed for all verticals except carwash. Pipeline auto-pulls AADT from S1 research.
 const FUEL_TRAFFIC = [
   { name: "_surfaceNote", label: "", type: "helper", tier: "standard", helperText: "Site / Surface Road — the road your site fronts on" },
   { name: "aadt", label: "Surface Road AADT", type: "number", placeholder: "e.g. 18500", tier: "standard", half: true, hint: "Leave blank if unknown, we'll pull it", hintLarge: true },
@@ -3288,7 +3288,7 @@ export default function App() {
   const allSections = vDef ? [
     { id: "site", title: "Site Information", n: "00", fields: vertical === "travel" ? [...SHARED_SITE, ...TRAVEL_SITE_EXTRAS] : SHARED_SITE },
     ...vDef.sections,
-    { id: "traffic", title: (tierOrder[tier] >= tierOrder["pro"]) ? "Traffic & Demographics" : "Traffic", n: String(vDef.sections.length + 1).padStart(2,"0"), fields: (vertical === "cstore" || vertical === "travel") ? FUEL_TRAFFIC : SHARED_TRAFFIC },
+    ...(vertical === "carwash" ? [{ id: "traffic", title: (tierOrder[tier] >= tierOrder["pro"]) ? "Traffic & Demographics" : "Traffic", n: String(vDef.sections.length + 1).padStart(2,"0"), fields: SHARED_TRAFFIC }] : []),
     ...(tier === "decision" ? [scenarioSection] : []),
   ] : [];
   const visSections = allSections.map(s => ({ ...s, fields: s.fields.filter(f => show(f.tier, f.maxTier)) })).filter(s => s.fields.length > 0);
