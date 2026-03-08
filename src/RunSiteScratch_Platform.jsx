@@ -297,6 +297,40 @@ function travelMerchBase(sqft, brand) {
   return Math.round((baseSf * perSf) + (extraSf * perSf * TC_DIMINISH_RATE));
 }
 
+// ── Fuel volume scaling with diminishing returns + AADT ceiling (S18) ──
+const GAS_BENCHMARK = 117000;
+const GAS_BENCHMARK_POS = 8;
+const GAS_DIMINISH_POS = 12;
+const GAS_DIMINISH_RATE_1 = 0.50;
+const GAS_DIMINISH_POS_2 = 20;
+const GAS_DIMINISH_RATE_2 = 0.15;
+
+function scaledGasBase(pos) {
+  const fullPos = Math.min(pos, GAS_DIMINISH_POS);
+  let vol = GAS_BENCHMARK * (fullPos / GAS_BENCHMARK_POS);
+  if (pos > GAS_DIMINISH_POS) {
+    const tier2Pos = Math.min(pos, GAS_DIMINISH_POS_2) - GAS_DIMINISH_POS;
+    vol += GAS_BENCHMARK * (tier2Pos / GAS_BENCHMARK_POS) * GAS_DIMINISH_RATE_1;
+  }
+  if (pos > GAS_DIMINISH_POS_2) {
+    const tier3Pos = pos - GAS_DIMINISH_POS_2;
+    vol += GAS_BENCHMARK * (tier3Pos / GAS_BENCHMARK_POS) * GAS_DIMINISH_RATE_2;
+  }
+  return Math.round(vol);
+}
+
+function aadtGasCeiling(aadt, captureRate) {
+  if (!aadt || aadt <= 0) return Infinity;
+  return Math.round(aadt * captureRate * 10.5 * 30);
+}
+
+function effectiveGasBase(pos, aadt, vertical) {
+  const posBase = scaledGasBase(pos);
+  const capRate = vertical === "travel" ? 0.020 : 0.035;
+  const aadtCeil = aadtGasCeiling(aadt, capRate);
+  return Math.min(posBase, aadtCeil);
+}
+
 // ── Field normalization — bridge form field names to pipeline names ──
 function normalizeFormData(fd, vertical) {
   const n = { ...fd };
@@ -430,13 +464,13 @@ function formatIntake(fd, vertical, tier) {
       lines.push(`${k}: ${v}`);
     }
   }
-  // ── Fuel volume note (c-store / travel — position-scaled FLOOR + CEILING) ──
+  // ── Fuel volume note (c-store / travel — position-scaled with diminishing returns S18) ──
   if (vertical === "cstore" || vertical === "travel") {
     const pos = parseInt(fd.fuelPositions) || 8;
     const dispensers = Math.ceil(pos / 2);
-    const BENCHMARK_GAL = 117000;
-    const BENCHMARK_POS = 8;
-    const scaledBase = Math.round(BENCHMARK_GAL * (pos / BENCHMARK_POS));
+    const aadt = parseInt(fd.aadt) || 0;
+    const scaledBase = effectiveGasBase(pos, aadt, vertical);
+    const posOnlyBase = scaledGasBase(pos);
     let locAdj = 1.0;
     let locNotes = [];
     if (fd.visibility === "poor" || fd.visibility === "moderate") { locAdj *= 0.85; locNotes.push("limited visibility (-15%)"); }
@@ -451,7 +485,9 @@ function formatIntake(fd, vertical, tier) {
     const adjFloor = Math.round(scaledBase * totalAdj * 0.75);
     const adjTarget = Math.round(scaledBase * totalAdj * 0.90);
     const adjCeil = Math.round(scaledBase * totalAdj * 1.05);
-    lines.push(`FUEL VOLUME NOTE: ${dispensers} dispenser${dispensers > 1 ? "s" : ""} (${pos} fueling positions). National avg: ~117,000 gal/mo at 8 positions (MMCG 2023). Position-scaled baseline for ${pos} positions: ~${scaledBase.toLocaleString()} gal/mo.${locNotes.length > 0 ? " Location adjustments: " + locNotes.join(", ") + "." : ""} PROJECTED GASOLINE RANGE: ${adjFloor.toLocaleString()}-${adjCeil.toLocaleString()} gal/mo. TARGET MID-POINT: ~${adjTarget.toLocaleString()} gal/mo. Your low scenario should be near ${adjFloor.toLocaleString()}, your mid near ${adjTarget.toLocaleString()}, and your high near ${adjCeil.toLocaleString()}. Do NOT project below ${adjFloor.toLocaleString()} gal/mo — that would imply the site underperforms even a poor-location benchmark. Do NOT exceed ${adjCeil.toLocaleString()} gal/mo.${pos < BENCHMARK_POS ? ` A ${dispensers}-dispenser site CANNOT physically pump like an 8-dispenser interchange location.` : ""}`);
+    const aadtNote = aadt > 0 && posOnlyBase > scaledBase ? ` AADT ceiling applied: ${aadt.toLocaleString()} AADT × ${vertical === "travel" ? "2" : "3.5"}% capture × 10.5 gal × 30 days caps effective volume below pure position scaling.` : "";
+    const diminishNote = pos > GAS_DIMINISH_POS ? ` Diminishing returns above ${GAS_DIMINISH_POS} positions — additional positions provide peak-hour throughput but do not proportionally increase volume.` : "";
+    lines.push(`FUEL VOLUME NOTE: ${dispensers} dispenser${dispensers > 1 ? "s" : ""} (${pos} fueling positions). National avg: ~117,000 gal/mo at 8 positions (MMCG 2023). Effective baseline for ${pos} positions: ~${scaledBase.toLocaleString()} gal/mo.${diminishNote}${aadtNote}${locNotes.length > 0 ? " Location adjustments: " + locNotes.join(", ") + "." : ""} PROJECTED GASOLINE RANGE: ${adjFloor.toLocaleString()}-${adjCeil.toLocaleString()} gal/mo. TARGET MID-POINT: ~${adjTarget.toLocaleString()} gal/mo. Your low scenario should be near ${adjFloor.toLocaleString()}, your mid near ${adjTarget.toLocaleString()}, and your high near ${adjCeil.toLocaleString()}. Do NOT project below ${adjFloor.toLocaleString()} gal/mo. Do NOT exceed ${adjCeil.toLocaleString()} gal/mo.${pos < GAS_BENCHMARK_POS ? ` A ${dispensers}-dispenser site CANNOT physically pump like an 8-dispenser interchange location.` : ""}`);
   }
 
   // Add explicit diesel context for c-store to prevent overestimation
@@ -1144,12 +1180,11 @@ function clampProjections(analysis, fd, vertical) {
     }
   }
 
-  // C-store / Travel: position-based fuel volume FLOOR + CEILING
+  // C-store / Travel: position-based fuel volume FLOOR + CEILING (S18: diminishing returns + AADT ceiling)
   if (vertical === "cstore" || vertical === "travel") {
     const pos = parseInt(fd.fuelPositions) || 8;
-    const BENCHMARK_GAL = 117000;
-    const BENCHMARK_POS = 8;
-    const scaledBase = Math.round(BENCHMARK_GAL * (pos / BENCHMARK_POS));
+    const aadt = parseInt(fd.aadt) || 0;
+    const scaledBase = effectiveGasBase(pos, aadt, vertical);
     let locAdj = 1.0;
     if (fd.visibility === "poor" || fd.visibility === "moderate") locAdj *= 0.85;
     if (fd.accessType === "right_in_out") locAdj *= 0.88;
@@ -2256,6 +2291,7 @@ const VF = {
       { name: "storeSqft", label: "Retail Square Footage", type: "number", placeholder: "8000", suffix: "SF", tier: "quick", required: true, half: true },
       { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "12", suffix: "acres", tier: "quick", half: true },
       { name: "tcBrand", label: "Brand Affiliation", type: "select", tier: "standard", options: ["Independent","Pilot/Flying J","Love's","TA/Petro","Ambest","Other"] },
+      { name: "hours", label: "Operating Hours", type: "radio", tier: "quick", options: [{ value: "24hr", label: "24 Hours" }, { value: "extended", label: "5am–12am" }, { value: "standard", label: "6am–10pm" }] },
     ]},
     { id: "fuel", title: "Fuel & Diesel", n: "02", fields: [
       { name: "fuelBrand", label: "Fuel Brand", type: "select", tier: "quick", required: true, half: true, options: ["Unbranded","Shell","BP","Exxon","Mobil","Chevron","Marathon","Citgo","Valero","Phillips 66","Other"] },
