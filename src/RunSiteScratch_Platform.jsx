@@ -82,8 +82,8 @@ const SHARED_TRAFFIC = [
   { name: "nearestEmployer", label: "Major Employer Nearby", type: "text", placeholder: "e.g. Eastman Chemical — 5 mi, 14K employees", tier: "pro" },
 ];
 
-// ─── FUEL VERTICAL TRAFFIC (preserved for reference — removed from intake in S19) ────────
-// Traffic input removed for all verticals except carwash. Pipeline auto-pulls AADT from S1 research.
+// ─── FUEL VERTICAL TRAFFIC (C-Store & Travel Center) ────────
+// Splits traffic into site/surface road vs. highway for fuel volume modeling
 const FUEL_TRAFFIC = [
   { name: "_surfaceNote", label: "", type: "helper", tier: "standard", helperText: "Site / Surface Road — the road your site fronts on" },
   { name: "aadt", label: "Surface Road AADT", type: "number", placeholder: "e.g. 18500", tier: "standard", half: true, hint: "Leave blank if unknown, we'll pull it", hintLarge: true },
@@ -2213,7 +2213,7 @@ const VF = {
         { value: "large", label: "Large C-Store (4,000+ SF)" }, { value: "kiosk", label: "Fuel Kiosk / Minimal" },
       ]},
       { name: "storeSqft", label: "Store Square Footage", type: "number", placeholder: "3200", suffix: "SF", tier: "quick", required: true, half: true },
-      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "1.5 acres or 32,670 SF", suffixOptions: ["acres", "SF"], tier: "standard", half: true },
+      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "1.5", suffix: "acres", tier: "standard", half: true },
       { name: "yearBuilt", label: "Year Built", type: "number", placeholder: "2026", tier: "standard", half: true },
       { name: "brandAffiliation", label: "Store Brand / Banner", type: "text", placeholder: "e.g. Circle K, Independent", tier: "standard", half: true },
     ]},
@@ -2289,7 +2289,7 @@ const VF = {
     { id: "fac", title: "Facility & Format", n: "01", fields: [
       { name: "tcFormat", label: "Travel Center Format", type: "radio", tier: "quick", required: true, options: [{ value: "full_tc", label: "Full Travel Center" }, { value: "truck_stop", label: "Truck Stop (heavy diesel)" }, { value: "hybrid_tc", label: "Hybrid (TC + QSR)" }, { value: "independent", label: "Independent / Small" }] },
       { name: "storeSqft", label: "Retail Square Footage", type: "number", placeholder: "8000", suffix: "SF", tier: "quick", required: true, half: true },
-      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "12 acres or 522,720 SF", suffixOptions: ["acres", "SF"], tier: "quick", half: true },
+      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "12", suffix: "acres", tier: "quick", half: true },
       { name: "tcBrand", label: "Brand Affiliation", type: "select", tier: "standard", options: ["Independent","Pilot/Flying J","Love's","TA/Petro","Ambest","Other"] },
       { name: "hours", label: "Operating Hours", type: "radio", tier: "quick", options: [{ value: "24hr", label: "24 Hours" }, { value: "extended", label: "5am–12am" }, { value: "standard", label: "6am–10pm" }] },
     ]},
@@ -2448,7 +2448,7 @@ const VF = {
       { name: "hasOutdoorSeating", label: "Outdoor / Patio Seating", type: "toggle", tier: "quick" },
       { name: "outdoorSeats", label: "Patio Seats", type: "number", placeholder: "20", tier: "standard", half: true, showIf: "hasOutdoorSeating" },
       { name: "parkingSpaces", label: "Dedicated Parking Spaces", type: "number", placeholder: "35", tier: "standard", half: true, hint: "Leave blank if shared lot" },
-      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "0.75 acres or 32,670 SF", suffixOptions: ["acres", "SF"], tier: "standard", half: true, showIf: "buildingType=freestanding" },
+      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "0.75", suffix: "acres", tier: "standard", half: true, showIf: "buildingType=freestanding" },
     ]},
     { id: "menu", title: "Menu & Dayparts", n: "03", fields: [
       { name: "hasBreakfast", label: "Breakfast Daypart", type: "toggle", tier: "quick", hint: "Opens early for breakfast service" },
@@ -2541,7 +2541,7 @@ const VF = {
       { name: "storeSqft", label: "Total Store Square Footage", type: "number", placeholder: "12000", suffix: "SF", tier: "quick", required: true, half: true },
       { name: "salesFloorSqft", label: "Sales Floor Square Footage", type: "number", placeholder: "9000", suffix: "SF", tier: "standard", half: true, hint: "Excludes backroom, office, walk-in coolers" },
       { name: "parkingSpaces", label: "Parking Spaces", type: "number", placeholder: "60", tier: "quick", half: true },
-      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "1.5 acres or 65,340 SF", suffixOptions: ["acres", "SF"], tier: "standard", half: true, showIf: "buildingType=freestanding" },
+      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "1.5", suffix: "acres", tier: "standard", half: true, showIf: "buildingType=freestanding" },
       { name: "yearBuilt", label: "Year Built / Opening", type: "number", placeholder: "2026", tier: "standard", half: true },
     ]},
     { id: "checkout", title: "Checkout & Operations", n: "03", fields: [
@@ -2637,7 +2637,7 @@ const VF = {
       { name: "storeSqft", label: "Store Square Footage", type: "number", placeholder: "3500", suffix: "SF", tier: "quick", required: true, half: true },
       { name: "hasWalkInCooler", label: "Walk-In Cooler", type: "toggle", tier: "quick" },
       { name: "hasBeerCave", label: "Beer Cave (walk-in customer-facing)", type: "toggle", tier: "quick" },
-      { name: "lotSize", label: "Lot Size", type: "number", placeholder: "0.5 acres or 21,780 SF", suffixOptions: ["acres", "SF"], tier: "standard", half: true },
+      { name: "lotSize", label: "Lot Size", type: "number", placeholder: "0.5", suffix: "acres", tier: "standard", half: true },
       { name: "yearBuilt", label: "Year Built / Renovated", type: "number", placeholder: "2026", tier: "standard", half: true },
       { name: "storeBrand", label: "Store Brand / Banner", type: "text", placeholder: "e.g. Spec's, Total Wine, Independent", tier: "standard" },
       { name: "coolerDoorCount", label: "Cooler Door Count", type: "number", placeholder: "18", tier: "pro", half: true },
@@ -2698,7 +2698,7 @@ const VF = {
         { value: "premium", label: "Premium / Mega Tunnel (150+ ft, ~170 cars/hr)" },
       ]},
       { name: "selfServeBays", label: "Number of Bays", type: "number", placeholder: "4", tier: "quick", half: true, showIf: "washType=self_serve||washType=inbay_auto" },
-      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "1.2 acres or 52,272 SF", suffixOptions: ["acres", "SF"], tier: "standard", half: true },
+      { name: "lotSize", label: "Total Lot Size", type: "number", placeholder: "1.2", suffix: "acres", tier: "standard", half: true },
       { name: "yearBuilt", label: "Year Built", type: "number", placeholder: "2026", tier: "standard", half: true },
       { name: "equipmentBrand", label: "Equipment Brand", type: "text", placeholder: "e.g. Tommy's, Sonny's, PDQ, MacNeil", tier: "standard" },
       { name: "hasWaterReclaim", label: "Water Reclaim System", type: "toggle", tier: "pro" },
@@ -2799,7 +2799,6 @@ const lbl = { fontSize: 12, fontWeight: 600, color: "#aaa", marginBottom: 5, dis
 const inp = { width: "100%", padding: "10px 12px", background: "#111", border: "1px solid #222", color: "#fff", fontSize: 14, fontFamily: "'Inter', sans-serif", outline: "none", transition: "border-color 0.3s" };
 
 function Field({ field, value, onChange, allValues }) {
-  const [focused, setFocused] = useState(false);
   const w = { flex: field.half ? "1 1 calc(50% - 8px)" : "1 1 100%", minWidth: field.half ? 200 : 0, marginBottom: 4 };
   // Dynamic required: field is required if requiredUnless field is empty
   const isRequired = field.required || (field.requiredUnless && !allValues[field.requiredUnless]);
@@ -2809,8 +2808,6 @@ function Field({ field, value, onChange, allValues }) {
     if (!vis) return null;
   }
   if (field.hideIf && allValues[field.hideIf]) return null;
-  const filled = value !== undefined && value !== "";
-  const example = field.placeholder ? field.placeholder.replace(/^e\.g\.?\s*/i, "") : "";
   if (field.type === "toggle") {
     const c = !!value;
     return (<div style={w}><label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none", padding: "5px 0" }} onClick={() => onChange(field.name, !c)}>
@@ -2824,7 +2821,7 @@ function Field({ field, value, onChange, allValues }) {
       ))}</div></div>);
   }
   if (field.type === "textarea") {
-    return (<div style={w}><label style={lbl}>{field.label}</label><textarea value={value || ""} onChange={e => onChange(field.name, e.target.value)} placeholder={field.placeholder} style={{ ...inp, minHeight: 70, resize: "vertical", borderStyle: filled ? "solid" : "dashed", borderColor: focused ? "#555" : filled ? "#2a5a3a" : "#2a2a2a", background: filled ? "#0a110d" : "#111" }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} /></div>);
+    return (<div style={w}><label style={lbl}>{field.label}</label><textarea value={value || ""} onChange={e => onChange(field.name, e.target.value)} placeholder={field.placeholder} style={{ ...inp, minHeight: 70, resize: "vertical" }} /></div>);
   }
   if (field.type === "helper") {
     return (<div style={{ flex: "1 1 100%", marginBottom: 4, padding: "10px 14px", background: "#0a1628", border: "1px solid #1a3050", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -2836,7 +2833,7 @@ function Field({ field, value, onChange, allValues }) {
   }
   if (field.type === "select") {
     return (<div style={w}><label style={lbl}>{field.label} {isRequired && <span style={{ color: "#fff" }}>*</span>}</label>
-      <select value={value || ""} onChange={e => onChange(field.name, e.target.value)} style={{ ...inp, appearance: "none", borderStyle: filled ? "solid" : "dashed", borderColor: focused ? "#555" : filled ? "#2a5a3a" : "#2a2a2a", background: filled ? "#0a110d" : "#111" }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
+      <select value={value || ""} onChange={e => onChange(field.name, e.target.value)} style={{ ...inp, appearance: "none" }}>
         <option value="">Select...</option>{(field.options || []).map((o, i) => {
           if (typeof o === "string") return <option key={o} value={o}>{o}</option>;
           if (o.disabled) return <option key={o.value + i} value="" disabled style={{ fontWeight: 700, color: "#888", background: "#1a1a1a" }}>{o.label}</option>;
@@ -2846,30 +2843,12 @@ function Field({ field, value, onChange, allValues }) {
       {field.hint && <span style={{ fontSize: 11, color: "#666", marginTop: 2, display: "block" }}>{field.hint}</span>}
     </div>);
   }
-  // ── Text / Number inputs: Option D (S19) — no placeholder, dashed→solid border, e.g. subtext ──
-  const activeSuffix = field.suffixOptions ? (allValues[field.name + "Unit"] || field.suffixOptions[0]) : field.suffix;
-  const suffixWidth = field.suffixOptions ? 64 : (activeSuffix ? 40 : 12);
   return (<div style={w}><label style={lbl}>{field.label} {isRequired && <span style={{ color: "#fff" }}>*</span>}</label>
     <div style={{ position: "relative" }}>
       {field.prefix && <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#666", fontSize: 14 }}>{field.prefix}</span>}
-      <input type={field.type} value={value || ""} onChange={e => onChange(field.name, e.target.value)}
-        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-        style={{ ...inp, paddingLeft: field.prefix ? 28 : 12, paddingRight: suffixWidth,
-          borderStyle: filled ? "solid" : "dashed",
-          borderColor: focused ? "#555" : filled ? "#2a5a3a" : "#2a2a2a",
-          background: filled ? "#0a110d" : "#111",
-        }} />
-      {field.suffixOptions ? (
-        <span style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 0 }}>
-          {field.suffixOptions.map(u => (
-            <span key={u} onClick={() => onChange(field.name + "Unit", u)} style={{ padding: "3px 6px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: activeSuffix === u ? "#fff" : "#555", background: activeSuffix === u ? "#222" : "transparent", borderRadius: 3, transition: "all 0.2s", userSelect: "none" }}>{u}</span>
-          ))}
-        </span>
-      ) : activeSuffix ? (
-        <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#666", fontSize: 13 }}>{activeSuffix}</span>
-      ) : null}
+      <input type={field.type} value={value || ""} onChange={e => onChange(field.name, e.target.value)} placeholder={field.placeholder} style={{ ...inp, paddingLeft: field.prefix ? 28 : 12, paddingRight: field.suffix ? 40 : 12 }} onFocus={e => e.target.style.borderColor = "#444"} onBlur={e => e.target.style.borderColor = "#222"} />
+      {field.suffix && <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#666", fontSize: 13 }}>{field.suffix}</span>}
     </div>
-    {!filled && example && <span style={{ fontSize: 12.5, color: "#555", marginTop: 3, display: "block", fontStyle: "italic" }}>e.g. {example}</span>}
     {field.hint && <span style={{ fontSize: field.hintLarge ? 14 : 11, color: field.hintLarge ? "#aaa" : "#666", marginTop: 2, display: "block", fontWeight: field.hintLarge ? 600 : 400 }}>{field.hint}</span>}</div>);
 }
 // ─── PROCESSING ANIMATION ────────────────────────────────────
@@ -3309,7 +3288,7 @@ export default function App() {
   const allSections = vDef ? [
     { id: "site", title: "Site Information", n: "00", fields: vertical === "travel" ? [...SHARED_SITE, ...TRAVEL_SITE_EXTRAS] : SHARED_SITE },
     ...vDef.sections,
-    ...(vertical === "carwash" ? [{ id: "traffic", title: (tierOrder[tier] >= tierOrder["pro"]) ? "Traffic & Demographics" : "Traffic", n: String(vDef.sections.length + 1).padStart(2,"0"), fields: SHARED_TRAFFIC }] : []),
+    { id: "traffic", title: (tierOrder[tier] >= tierOrder["pro"]) ? "Traffic & Demographics" : "Traffic", n: String(vDef.sections.length + 1).padStart(2,"0"), fields: (vertical === "cstore" || vertical === "travel") ? FUEL_TRAFFIC : SHARED_TRAFFIC },
     ...(tier === "decision" ? [scenarioSection] : []),
   ] : [];
   const visSections = allSections.map(s => ({ ...s, fields: s.fields.filter(f => show(f.tier, f.maxTier)) })).filter(s => s.fields.length > 0);
